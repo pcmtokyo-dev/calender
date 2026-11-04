@@ -193,7 +193,7 @@
         white-space: nowrap;
         text-overflow: ellipsis;
       }
-      .event-wrapper.expanded.event-header {
+      .event-wrapper.expanded .event-header {
         border-radius: 3px 3px 0 0;
         white-space: normal;
       }
@@ -208,7 +208,7 @@
         font-size: 12px;
         line-height: 1.5;
       }
-      .event-wrapper.expanded.event-details {
+      .event-wrapper.expanded .event-details {
         display: block;
       }
       .detail-item {
@@ -314,7 +314,7 @@
         font-weight: bold;
         pointer-events: none;
       }
-      .month-cell.other-month.month-date-num {
+      .month-cell.other-month .month-date-num {
         color: #bdc1c6;
       }
       .month-event {
@@ -332,8 +332,8 @@
       }
 
       /* 全文表示モード */
-      .wrap-text.grid-event,
-      .wrap-text.month-event {
+      .wrap-text .grid-event,
+      .wrap-text .month-event {
         white-space: normal;
         word-break: break-all;
       }
@@ -791,6 +791,17 @@
         return ev;
       }
 
+      // 表示用：先頭の【未決】を末尾へ移動する。物件名の開始が見えるようにするため。
+      // すでに末尾にある場合や、【未決】で始まらない場合はそのまま返す。
+      function moveUndecidedTagToEnd(ev) {
+        const tag = "【未決】";
+        if (!ev.title || ev.title.indexOf(tag) !== 0) return ev;
+        const rest = ev.title.slice(tag.length).trim();
+        if (!rest) return ev;
+        ev.title = rest + " " + tag;
+        return ev;
+      }
+
       // 色だけに頼らないための枠線。最終作業日は黒い枠で囲み、他の予定と区別する。
       function finalEventExtraStyle(ev) {
         const isFinal =
@@ -799,7 +810,9 @@
       }
 
       function applyData(data) {
-        fetchedEvents = (data.events || []).map(normalizeFinalWorkDay);
+        fetchedEvents = (data.events || [])
+          .map(normalizeFinalWorkDay)
+          .map(moveUndecidedTagToEnd);
         fetchedCalendars = data.calendars || [];
 
         if (isInitialLoad) {
@@ -1006,6 +1019,71 @@
         modal.classList.add("show");
       }
 
+      // 1日表示のインライン展開。新しいGASでは一覧に場所・説明が
+      // 入っていないため、開いたときにだけ getEvent で取りに行く。
+      // 旧GAS（一覧に詳細入り）の場合は、すでに描画済みなので取りに行かない。
+      async function toggleEventDetails(eventId) {
+        const wrapper = document.getElementById("wrapper-" + eventId);
+        if (!wrapper) return;
+        const isOpening = !wrapper.classList.contains("expanded");
+        wrapper.classList.toggle("expanded");
+        if (!isOpening) return;
+        const details = wrapper.querySelector(".event-details");
+        if (!details || details.dataset.loaded === "true") return;
+        const ev = fetchedEvents.find((e) => e.id === eventId);
+        if (!ev) return;
+        if (ev.location !== undefined || ev.description !== undefined) {
+          details.dataset.loaded = "true";
+          return;
+        }
+        if (!ev.hasDetail) {
+          details.dataset.loaded = "true";
+          return;
+        }
+        const appendDetail = (location, description) => {
+          let html = "";
+          if (location)
+            html += `<div class="detail-item"><div class="detail-icon">📍</div><div>${escapeAndFormatHtml(location)}</div></div>`;
+          if (description)
+            html += `<div class="detail-item"><div class="detail-icon">📝</div><div>${escapeAndFormatHtml(description)}</div></div>`;
+          details.insertAdjacentHTML("beforeend", html);
+          details.dataset.loaded = "true";
+        };
+        if (detailCache.has(ev.id)) {
+          const detail = detailCache.get(ev.id);
+          appendDetail(detail.location, detail.description);
+          return;
+        }
+        const loading = document.createElement("div");
+        loading.className = "detail-item";
+        loading.innerHTML =
+          '<div class="detail-icon">📝</div><div>詳細を読み込み中…</div>';
+        details.appendChild(loading);
+        try {
+          const eventIdRaw = ev.eventId || ev.id;
+          const url = `${gasUrl}?action=getEvent&calId=${encodeURIComponent(ev.calId)}&eventId=${encodeURIComponent(eventIdRaw)}&start=${ev.startTime}&end=${ev.endTime}`;
+          const response = await fetch(url, {
+            method: "GET",
+            redirect: "follow",
+          });
+          const detail = await response.json();
+          loading.remove();
+          if (
+            !detail.error &&
+            (detail.location !== undefined ||
+              detail.description !== undefined)
+          ) {
+            detailCache.set(ev.id, detail);
+            appendDetail(detail.location, detail.description);
+          } else {
+            details.dataset.loaded = "true";
+          }
+        } catch (e) {
+          loading.remove();
+          details.dataset.loaded = "true";
+        }
+      }
+
       function closeModal() {
         document.getElementById("detail-modal").classList.remove("show");
       }
@@ -1087,7 +1165,7 @@ ${escapeAndFormatHtml(cal.name)}
                 ? "終日"
                 : formatTime(ev.startTime) + " - " + formatTime(ev.endTime);
               return `<div class="event-wrapper" id="wrapper-${ev.id}">
-<div class="event-header" style="background-color:${ev.color}; color:${ev.textColor};${finalEventExtraStyle(ev)}" onclick="document.getElementById('wrapper-${ev.id}').classList.toggle('expanded')">
+<div class="event-header" style="background-color:${ev.color}; color:${ev.textColor};${finalEventExtraStyle(ev)}" onclick="toggleEventDetails('${ev.id}')">
 ${escapeAndFormatHtml(ev.title)}
 </div>
 <div class="event-details">
