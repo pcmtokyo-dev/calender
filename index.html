@@ -773,8 +773,33 @@
         return `${mode}|${reqStart.getTime()}|${reqEnd.getTime()}|${ids.join(",")}`;
       }
 
+      // 色弱配慮：最終作業日は、GASが古いままでもタイトルで判定して上書きする。
+      // 立会あり＝赤 #C73836、立会なし＝青 #0072B2（Okabe-Ito）。どちらも白文字。
+      // 赤とオレンジは色弱の方には茶色に寄って見分けにくいため、オレンジは使わない。
+      function normalizeFinalWorkDay(ev) {
+        if (!ev.title || ev.title.indexOf("最終作業日") !== 0) return ev;
+        ev.isFinal = true;
+        if (ev.title.indexOf("立会なし") !== -1) {
+          ev.finalKind = "なし";
+          ev.color = "#0072B2";
+          ev.textColor = "#ffffff";
+        } else if (ev.title.indexOf("立会あり") !== -1) {
+          ev.finalKind = "あり";
+          ev.color = "#C73836";
+          ev.textColor = "#ffffff";
+        }
+        return ev;
+      }
+
+      // 色だけに頼らないための枠線。最終作業日は黒い枠で囲み、他の予定と区別する。
+      function finalEventExtraStyle(ev) {
+        const isFinal =
+          ev.isFinal || (ev.title && ev.title.indexOf("最終作業日") === 0);
+        return isFinal ? " box-shadow: inset 0 0 0 2px #222222;" : "";
+      }
+
       function applyData(data) {
-        fetchedEvents = data.events || [];
+        fetchedEvents = (data.events || []).map(normalizeFinalWorkDay);
         fetchedCalendars = data.calendars || [];
 
         if (isInitialLoad) {
@@ -1062,7 +1087,7 @@ ${escapeAndFormatHtml(cal.name)}
                 ? "終日"
                 : formatTime(ev.startTime) + " - " + formatTime(ev.endTime);
               return `<div class="event-wrapper" id="wrapper-${ev.id}">
-<div class="event-header" style="background-color:${ev.color}; color:${ev.textColor};" onclick="document.getElementById('wrapper-${ev.id}').classList.toggle('expanded')">
+<div class="event-header" style="background-color:${ev.color}; color:${ev.textColor};${finalEventExtraStyle(ev)}" onclick="document.getElementById('wrapper-${ev.id}').classList.toggle('expanded')">
 ${escapeAndFormatHtml(ev.title)}
 </div>
 <div class="event-details">
@@ -1129,7 +1154,7 @@ ${ev.description ? `<div class="detail-item"><div class="detail-icon">📝</div>
 
             (eventsByDate.get(targetDate.toDateString()) || []).forEach(
               (ev) => {
-                html += `<div class="grid-event" style="background-color:${ev.color}; color:${ev.textColor};" onclick="openEventModal('${ev.id}', event); event.stopPropagation();">
+                html += `<div class="grid-event" style="background-color:${ev.color}; color:${ev.textColor};${finalEventExtraStyle(ev)}" onclick="openEventModal('${ev.id}', event); event.stopPropagation();">
 ${escapeAndFormatHtml(ev.title)}
 </div>`;
               },
@@ -1157,7 +1182,7 @@ ${escapeAndFormatHtml(ev.title)}
 <div class="month-date-num">${iterDate.getDate()}</div>`;
 
             (eventsByDate.get(dateStr) || []).forEach((ev) => {
-              html += `<div class="month-event" style="background-color:${ev.color}; color:${ev.textColor};" onclick="openEventModal('${ev.id}', event); event.stopPropagation();">
+              html += `<div class="month-event" style="background-color:${ev.color}; color:${ev.textColor};${finalEventExtraStyle(ev)}" onclick="openEventModal('${ev.id}', event); event.stopPropagation();">
 ${escapeAndFormatHtml(ev.title)}
 </div>`;
             });
