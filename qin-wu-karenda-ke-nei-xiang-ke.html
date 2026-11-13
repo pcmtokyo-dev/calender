@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>勤務カレンダー（課内向け）</title>
+    <style>
+      :root {
+        --bg: #f4f6f5;
+        --surface: #ffffff;
+        --surface-2: #eef2f0;
+        --ink: #1c2422;
+        --ink-2: #4c5a56;
+        --ink-3: #75837f;
+        --line: #d8dfdc;
+        --accent: #0e6e5c;
+        --accent-soft: #e2f0ec;
+        --sun: #c0392b;
+        --sat: #2060a8;
+        --warn-bg: #fdf3e3;
+        --warn-ink: #8a5a12;
+        --chip-bg: #eef2f0;
+        --mark-half: #b35c12;
+        --mark-half-bg: #fdeedd;
+        --mark-temp: #0e6e5c;
+        --mark-temp-bg: #e2f0ec;
+        --mark-sat: #2060a8;
+        --mark-sat-bg: #e3edf8;
+        --error-bg: #fdeceb;
+        --error-ink: #8f2318;
+        --today-ring: #0e6e5c;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #121615;
+          --surface: #1b2120;
+          --surface-2: #232b29;
+          --ink: #e8edeb;
+          --ink-2: #aebbb6;
+          --ink-3: #84938d;
+          --line: #333d3a;
+          --accent: #3fbf9f;
+          --accent-soft: #173a32;
+          --sun: #e08a7d;
+          --sat: #84b3e3;
+          --warn-bg: #3a2f18;
+          --warn-ink: #e3b96a;
+          --chip-bg: #262e2b;
+          --mark-half: #eda55c;
+          --mark-half-bg: #3d2c17;
+          --mark-temp: #5fd0b2;
+          --mark-temp-bg: #173a32;
+          --mark-sat: #84b3e3;
+          --mark-sat-bg: #1d3049;
+          --error-bg: #40201c;
+          --error-ink: #f0a294;
+          --today-ring: #3fbf9f;
+          color-scheme: dark;
+        }
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", "Noto Sans JP", Meiryo, sans-serif;
+        font-size: 15px;
+        line-height: 1.55;
+      }
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+      button { font: inherit; cursor: pointer; }
+      .wrap { max-width: 960px; margin: 0 auto; padding: 16px 14px 40px; }
+
+      /* ---------- controls ---------- */
+      .controls {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        margin-bottom: 12px;
+      }
+      .seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+      .seg button {
+        border: 0; background: transparent; color: var(--ink-2);
+        padding: 4px 14px; border-radius: 6px; font-weight: 600;
+      }
+      .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.18); }
+      .nav-btn {
+        border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+        border-radius: 8px; padding: 4px 12px; font-weight: 600;
+      }
+      .nav-btn:disabled { opacity: .4; cursor: default; }
+      select, input[type="search"] {
+        border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+        border-radius: 8px; padding: 4px 8px; font: inherit;
+      }
+      input[type="search"] { min-width: 0; flex: 1 1 150px; }
+      .period-label { font-size: 1.25rem; font-weight: 700; letter-spacing: .02em; }
+      .spacer { flex: 1; }
+      .cat-filter { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+      .cat-filter label {
+        display: inline-flex; align-items: center; gap: 6px;
+        border: 1px solid var(--line); background: var(--surface);
+        border-radius: 999px; padding: 6px 12px; min-height: 2.25rem; cursor: pointer; font-weight: 600;
+      }
+      .cat-filter input { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); margin: 0; }
+
+      /* ---------- status ---------- */
+      .status {
+        border: 1px solid var(--line); background: var(--surface);
+        border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; color: var(--ink-2);
+      }
+      .status.error { background: var(--error-bg); color: var(--error-ink); border-color: transparent; }
+      .status button { margin-left: 10px; }
+
+      /* ---------- month grid ---------- */
+      .cal { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+      .dow-row, .week-row { display: grid; grid-template-columns: repeat(7, 1fr); }
+      .dow-row div { text-align: center; font-size: .8rem; font-weight: 700; color: var(--ink-2); padding: 7px 0 5px; border-bottom: 1px solid var(--line); }
+      .dow-row .sun { color: var(--sun); } .dow-row .sat { color: var(--sat); }
+      .cell {
+        min-height: 86px; padding: 5px 6px 6px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line);
+        background: var(--surface); text-align: left; border-top: 0; border-left: 0; width: 100%;
+        display: flex; flex-direction: column; gap: 2px; color: var(--ink);
+      }
+      .week-row .cell:nth-child(7n) { border-right: 0; }
+      .week-row:last-child .cell { border-bottom: 0; }
+      .cell.outside { background: var(--surface-2); color: var(--ink-3); }
+      .cell .dnum { font-weight: 700; font-size: .95rem; line-height: 1.2; }
+      .cell.sun .dnum { color: var(--sun); }
+      .cell.sat .dnum { color: var(--sat); }
+      .cell .today-tag {
+        display: inline-block; background: var(--accent); color: #fff; border-radius: 4px;
+        font-size: .62rem; font-weight: 700; padding: 0 5px; margin-left: 5px; vertical-align: 2px;
+      }
+      .cell.today { box-shadow: inset 0 0 0 2px var(--today-ring); }
+      .cell.selected { background: var(--accent-soft); }
+      .cell .counts { font-size: .74rem; color: var(--ink-2); line-height: 1.45; }
+      .cell .counts:empty::after { content: " "; }
+      .cell .closed-tag { font-size: .74rem; font-weight: 700; color: var(--warn-ink); }
+      .cell .hit-dot { font-size: .72rem; color: var(--accent); font-weight: 700; }
+
+      /* ---------- detail / panels ---------- */
+      .panel {
+        background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+        padding: 14px 16px; margin-top: 12px;
+      }
+      .panel h2 { margin: 0 0 4px; font-size: 1.12rem; }
+      .panel h3 { margin: 14px 0 6px; font-size: .95rem; color: var(--ink-2); }
+      .panel h3 .n { color: var(--ink-3); font-weight: 600; font-size: .85rem; margin-left: 4px; }
+      .names { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; }
+      .names li { display: inline-flex; align-items: center; gap: 5px; }
+      .mark {
+        font-size: .68rem; font-weight: 700; border-radius: 4px; padding: 1px 6px; white-space: nowrap;
+      }
+      .mark.half { color: var(--mark-half); background: var(--mark-half-bg); }
+      .mark.temp { color: var(--mark-temp); background: var(--mark-temp-bg); }
+      .mark.sat { color: var(--mark-sat); background: var(--mark-sat-bg); }
+      .offbox { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; margin-top: 14px; }
+      .offbox h3 { margin-top: 0; }
+      .off-type { color: var(--ink-2); font-size: .82rem; }
+      .closed-banner {
+        background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px;
+        padding: 10px 12px; font-weight: 700; margin-bottom: 6px;
+      }
+      .empty-note { color: var(--ink-3); }
+
+      /* ---------- week matrix ---------- */
+      .matrix-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+      table.matrix { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 660px; }
+      .matrix th, .matrix td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 6px 4px; text-align: center; font-size: .86rem; }
+      .matrix tr > *:last-child { border-right: 0; }
+      .matrix tbody tr:last-child > * { border-bottom: 0; }
+      .matrix thead th { background: var(--surface-2); font-weight: 700; vertical-align: bottom; }
+      .matrix thead th .m-counts { display: block; font-size: .68rem; font-weight: 400; color: var(--ink-2); margin-top: 2px; white-space: nowrap; }
+      .matrix thead th.sun { color: var(--sun); }
+      .matrix thead th.sat { color: var(--sat); }
+      .matrix thead th.today { box-shadow: inset 0 0 0 2px var(--today-ring); }
+      .matrix thead th.m-name, .matrix tbody th.m-name {
+        position: sticky; left: 0; z-index: 1; background: var(--surface);
+        text-align: left; padding: 6px 10px; min-width: 7.5em; white-space: nowrap;
+      }
+      .matrix thead th.m-name { background: var(--surface-2); z-index: 2; }
+      .matrix tbody th.m-name .m-sub { display: block; font-size: .7rem; font-weight: 400; color: var(--ink-2); }
+      .matrix tr.m-cat td { background: var(--surface-2); font-weight: 700; text-align: left; padding: 5px 10px; font-size: .85rem; }
+      .matrix td.m-work { font-weight: 700; }
+      .matrix td.m-half { color: var(--mark-half); background: var(--mark-half-bg); font-weight: 700; }
+      .matrix td.m-temp { color: var(--mark-temp); background: var(--mark-temp-bg); font-weight: 700; }
+      .matrix td.m-sat { color: var(--mark-sat); background: var(--mark-sat-bg); font-weight: 700; }
+      .matrix td.m-off { color: var(--ink-2); background: var(--surface-2); }
+      .matrix td.m-closed { color: var(--warn-ink); background: var(--warn-bg); }
+      .matrix td.m-empty { text-align: left; color: var(--ink-3); padding: 12px; }
+      .matrix-legend { margin-top: 10px; font-size: .82rem; color: var(--ink-2); }
+
+      /* ---------- person view ---------- */
+      .person-list { display: flex; flex-direction: column; gap: 8px; }
+      .person-row {
+        width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line);
+        border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; color: var(--ink);
+      }
+      .person-row .pname { font-weight: 700; }
+      .cat-tag { font-size: .72rem; font-weight: 700; border-radius: 4px; padding: 1px 7px; background: var(--chip-bg); color: var(--ink-2); }
+      .person-row .pcount { color: var(--ink-2); font-size: .86rem; margin-left: auto; }
+      .person-dates { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+      .person-dates .pday {
+        border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: .82rem; background: var(--surface);
+        display: inline-flex; gap: 5px; align-items: center;
+      }
+      .person-dates .pday.sun { color: var(--sun); } .person-dates .pday.sat { color: var(--sat); }
+
+      /* ---------- footer ---------- */
+      footer { margin-top: 22px; color: var(--ink-2); font-size: .86rem; }
+      footer .foot-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+      .updated-line { font-size: .86rem; color: var(--ink-2); margin-bottom: 12px; }
+      .updated-line span { font-weight: 700; color: var(--ink); }
+      [hidden] { display: none !important; }
+      @media (max-width: 560px) {
+        .cell { min-height: 68px; padding: 4px 4px 5px; }
+        .cell .counts { font-size: .64rem; line-height: 1.4; }
+        .period-label { font-size: 1.08rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="controls" role="group" aria-label="表示の切り替え">
+        <div class="seg" role="group" aria-label="表示形式">
+          <button type="button" id="tab-month" aria-pressed="false">月表示</button>
+          <button type="button" id="tab-week" aria-pressed="true">週表示</button>
+          <button type="button" id="tab-person" aria-pressed="false">人別</button>
+        </div>
+        <span class="spacer"></span>
+        <span class="cat-filter" role="group" aria-label="区分で絞り込み">
+          <label><input type="checkbox" id="f-emp" checked />社員</label>
+          <label><input type="checkbox" id="f-alb" checked />アルバイト</label>
+          <label><input type="checkbox" id="f-other" checked />他部署</label>
+        </span>
+        <input type="search" id="f-name" placeholder="名前で絞り込み" aria-label="名前で絞り込み" />
+      </div>
+
+      <div class="controls" role="group" aria-label="期間の移動">
+        <button type="button" class="nav-btn" id="nav-prev" aria-label="前へ">‹ 前</button>
+        <button type="button" class="nav-btn" id="nav-today">今日</button>
+        <button type="button" class="nav-btn" id="nav-next" aria-label="次へ">次 ›</button>
+        <span class="period-label" id="period-label"></span>
+        <span class="spacer"></span>
+        <label id="weekstart-wrap">週の始まり
+          <select id="weekstart-select" aria-label="週の始まりの曜日を選ぶ">
+            <option value="0">日曜</option>
+            <option value="1" selected>月曜</option>
+            <option value="2">火曜</option>
+            <option value="3">水曜</option>
+            <option value="4">木曜</option>
+            <option value="5">金曜</option>
+            <option value="6">土曜</option>
+          </select>
+        </label>
+        <label id="ym-wrap" hidden>年月
+          <select id="ym-select" aria-label="年月を選ぶ"></select>
+        </label>
+        <label id="day-wrap" hidden>日
+          <select id="day-select" aria-label="日を選ぶ"></select>
+        </label>
+      </div>
+
+      <div class="status" id="status" role="status">読み込み中です…</div>
+      <div class="updated-line"><span id="updated-at"></span></div>
+
+      <section id="view-month" hidden>
+        <div class="cal" id="cal" aria-label="月カレンダー"></div>
+        <div class="panel" id="day-detail" aria-live="polite"></div>
+      </section>
+
+      <section id="view-week"></section>
+
+      <section id="view-person" hidden>
+        <div class="person-list" id="person-list"></div>
+        <div class="panel" id="person-detail" hidden></div>
+      </section>
+
+      <footer>
+        <div class="foot-row">
+          <button type="button" class="nav-btn" id="reload-btn">再読み込み</button>
+        </div>
+      </footer>
+    </main>
+
+    <script>
+      "use strict";
+      var API_URL = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec";
+      var WD = ["日", "月", "火", "水", "木", "金", "土"];
+      var CATS = [
+        { key: "emp", label: "社員", list: "empList" },
+        { key: "alb", label: "アルバイト", list: "albList" },
+        { key: "other", label: "他部署", list: "otherList" }
+      ];
+
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      function fmtKey(y, m, d) { return y + "/" + pad(m) + "/" + pad(d); }
+      function todayKey() {
+        var t = new Date();
+        return fmtKey(t.getFullYear(), t.getMonth() + 1, t.getDate());
+      }
+      function parseKey(key) {
+        var p = key.split("/");
+        return { y: +p[0], m: +p[1], d: +p[2] };
+      }
+      function esc(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+      /* 名前（印・印）→ {name, marks:[...]}。印は最初の「（」から最後の「）」の内側。 */
+      function splitMarks(raw) {
+        var i = raw.indexOf("（");
+        if (i < 0) return { name: raw, marks: [] };
+        var j = raw.lastIndexOf("）");
+        var inner = j > i ? raw.slice(i + 1, j) : raw.slice(i + 1);
+        return { name: raw.slice(0, i), marks: inner ? inner.split("・") : [] };
+      }
+      /* 休み「名前（種類）」→ {name, type}。種類内の括弧はそのまま残す。 */
+      function splitOff(raw) {
+        var i = raw.indexOf("（");
+        if (i < 0) return { name: raw, type: "" };
+        var j = raw.lastIndexOf("）");
+        return { name: raw.slice(0, i), type: j > i ? raw.slice(i + 1, j) : raw.slice(i + 1) };
+      }
+      function markCls(m) {
+        if (m === "半日") return "half";
+        if (m === "臨時") return "temp";
+        if (m === "土曜追加") return "sat";
+        return "temp";
+      }
+      function marksHtml(marks) {
+        return marks.map(function (m) {
+          return '<span class="mark ' + markCls(m) + '">' + esc(m) + "</span>";
+        }).join("");
+      }
+
+      var state = {
+        view: "week",
+        weekStartDay: 1,      // 週の始まりの曜日（0=日曜 … 6=土曜。既定は月曜）
+        data: null,           // {updatedAt, days}
+        byDate: {},
+        loading: true,
+        error: false,
+        cursor: null,         // {y, m} 表示中の月
+        selected: null,       // "YYYY/MM/DD"
+        weekStart: null,      // Date（日曜）
+        person: null,         // 選択中の人 {name, cat}
+        filters: { emp: true, alb: true, other: true, name: "" }
+      };
+
+      var els = {};
+      ["status", "cal", "day-detail", "view-month", "view-week", "view-person",
+       "person-list", "person-detail", "period-label", "ym-select", "day-select",
+       "ym-wrap", "day-wrap", "updated-at", "nav-prev", "nav-next", "nav-today",
+       "reload-btn", "f-emp", "f-alb", "f-other", "f-name", "weekstart-select",
+       "tab-month", "tab-week", "tab-person"].forEach(function (id) {
+        els[id] = document.getElementById(id);
+      });
+
+      function nameHit(name) {
+        var q = state.filters.name.trim();
+        return !q || name.indexOf(q) >= 0;
+      }
+      function activeCats() {
+        return CATS.filter(function (c) { return state.filters[c.key]; });
+      }
+      /* 絞り込み適用後のその日の出勤者 {emp:[{name,marks}], ...} */
+      function filteredWorkers(day) {
+        var out = {};
+        CATS.forEach(function (c) {
+          out[c.key] = (day[c.list] || []).map(splitMarks).filter(function (p) { return nameHit(p.name); });
+        });
+        return out;
+      }
+      function isClosed(day) { return day && day.note === "年始休業日"; }
+
+      /* ============ データ取得 ============ */
+      function load() {
+        state.loading = true;
+        state.error = false;
+        renderStatus();
+        fetch(API_URL + "?t=" + Date.now())
+          .then(function (r) {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+          })
+          .then(function (json) {
+            state.data = json;
+            state.byDate = {};
+            (json.days || []).forEach(function (d) { state.byDate[d.date] = d; });
+            state.loading = false;
+            restoreViewerState();
+            renderAll();
+          })
+          .catch(function () {
+            state.loading = false;
+            state.error = true;
+            renderStatus();
+            renderAll();
+          });
+      }
+
+      /* ============ 最後に見ていた表示の保存・復元 ============ */
+      var LS_KEY = "kinmu-viewer-state-v1";
+      var restored = false;
+      function saveViewerState() {
+        if (!state.data) return; /* 読み込み前は保存しない（保存済みの状態を上書きしないため） */
+        try {
+          localStorage.setItem(LS_KEY, JSON.stringify({
+            view: state.view,
+            weekStartDay: state.weekStartDay,
+            cursor: state.cursor,
+            selected: state.selected,
+            weekStart: state.weekStart ? fmtKey(state.weekStart.getFullYear(), state.weekStart.getMonth() + 1, state.weekStart.getDate()) : null,
+            person: state.person ? { name: state.person.name, cat: state.person.cat } : null
+          }));
+        } catch (e) { /* 保存できなくても表示は続ける */ }
+      }
+      function restoreViewerState() {
+        if (restored) return;
+        restored = true;
+        var raw;
+        try { raw = localStorage.getItem(LS_KEY); } catch (e) { return; }
+        if (!raw) return;
+        var s;
+        try { s = JSON.parse(raw); } catch (e) { return; }
+        if (!s || typeof s !== "object") return;
+        var days = (state.data && state.data.days) || [];
+        if (!days.length) return;
+        var first = parseKey(days[0].date), last = parseKey(days[days.length - 1].date);
+        if (s.view === "month" || s.view === "week" || s.view === "person") state.view = s.view;
+        if (isFinite(+s.weekStartDay) && +s.weekStartDay >= 0 && +s.weekStartDay <= 6) state.weekStartDay = +s.weekStartDay;
+        if (s.cursor && isFinite(+s.cursor.y) && isFinite(+s.cursor.m)) {
+          var cy = +s.cursor.y, cm = +s.cursor.m;
+          if (cy * 12 + cm >= first.y * 12 + first.m && cy * 12 + cm <= last.y * 12 + last.m) state.cursor = { y: cy, m: cm };
+        }
+        if (typeof s.selected === "string" && state.byDate[s.selected]) state.selected = s.selected;
+        if (typeof s.weekStart === "string" && state.byDate[s.weekStart]) {
+          var ws = parseKey(s.weekStart);
+          if (isFinite(ws.y) && isFinite(ws.m) && isFinite(ws.d)) state.weekStart = weekStartOf(new Date(ws.y, ws.m - 1, ws.d));
+        }
+        if (s.person && typeof s.person.name === "string") {
+          var found = peopleIndex().filter(function (p) { return p.name === s.person.name && (!s.person.cat || p.cat === s.person.cat); })[0];
+          if (found) state.person = found;
+        }
+      }
+
+      /* API の updatedAt は ISO 文字列（例 2026-11-13T13:50:00.000Z）で返ることがある。
+         その時刻は日本時間の壁時計そのもの（API 側で Date 化される際にタイムゾーン情報が付かないため）
+         なので、JST 変換はせず、年月日と時分だけを抜いて YYYY/MM/DD HH:MM で表示する。
+         すでに YYYY/MM/DD HH:MM の形ならそのまま表示する。 */
+      function formatUpdatedAt(v) {
+        var s = String(v || "");
+        if (!s) return "";
+        var m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) return m[1] + "/" + m[2] + "/" + m[3] + " " + m[4] + ":" + m[5];
+        return s;
+      }
+      function renderStatus() {
+        if (state.error) {
+          els.status.className = "status error";
+          els.status.innerHTML = "データを読み込めませんでした。通信状態を確認して、もう一度お試しください。" +
+            '<button type="button" class="nav-btn" id="retry-btn">再読み込み</button>';
+          document.getElementById("retry-btn").addEventListener("click", load);
+        } else if (state.loading) {
+          els.status.className = "status";
+          els.status.textContent = "読み込み中です…（日付は先に選べます）";
+        } else {
+          els.status.className = "status";
+          els.status.hidden = true;
+          els.status.textContent = "";
+          return;
+        }
+        els.status.hidden = false;
+      }
+
+      /* ============ 月表示（枠は読み込み前から出す） ============ */
+      function monthOptions() {
+        var set = {}, list = [];
+        if (state.data) {
+          state.data.days.forEach(function (d) {
+            var k = d.date.slice(0, 7);
+            if (!set[k]) { set[k] = true; list.push(k); }
+          });
+        }
+        var ck = state.cursor.y + "/" + pad(state.cursor.m);
+        if (!set[ck]) list.push(ck);
+        list.sort();
+        return list;
+      }
+
+      function renderMonth() {
+        var y = state.cursor.y, m = state.cursor.m;
+        els["period-label"].textContent = y + "年" + m + "月";
+        var sel = els["ym-select"];
+        sel.innerHTML = monthOptions().map(function (k) {
+          var p = k.split("/");
+          return '<option value="' + k + '"' + (k === y + "/" + pad(m) ? " selected" : "") + ">" +
+            (+p[0]) + "年" + (+p[1]) + "月</option>";
+        }).join("");
+        var dsel = els["day-select"];
+        var dim = new Date(y, m, 0).getDate();
+        var opts = "";
+        for (var d = 1; d <= dim; d++) {
+          var k2 = fmtKey(y, m, d);
+          opts += '<option value="' + k2 + '"' + (k2 === state.selected ? " selected" : "") + ">" + d + "日</option>";
+        }
+        dsel.innerHTML = opts;
+
+        var first = new Date(y, m - 1, 1);
+        var startDow = (first.getDay() - state.weekStartDay + 7) % 7;
+        var start = new Date(y, m - 1, 1 - startDow);
+        var today = todayKey();
+        var html = '<div class="dow-row">' + [0, 1, 2, 3, 4, 5, 6].map(function (k) {
+          var i = (state.weekStartDay + k) % 7;
+          return '<div class="' + (i === 0 ? "sun" : i === 6 ? "sat" : "") + '">' + WD[i] + "</div>";
+        }).join("") + "</div>";
+        for (var w = 0; w < 6; w++) {
+          html += '<div class="week-row">';
+          for (var i = 0; i < 7; i++) {
+            var dt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + i);
+            var key = fmtKey(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+            var dow = dt.getDay();
+            var day = state.byDate[key];
+            var cls = ["cell"];
+            if (dt.getMonth() !== m - 1) cls.push("outside");
+            if (dow === 0) cls.push("sun"); if (dow === 6) cls.push("sat");
+            if (key === today) cls.push("today");
+            if (key === state.selected) cls.push("selected");
+            var inner = '<span class="dnum">' + dt.getDate() +
+              (key === today ? '<span class="today-tag">今日</span>' : "") + "</span>";
+            if (day) {
+              if (isClosed(day)) {
+                inner += '<span class="closed-tag">休業日</span><span class="counts">出勤者 0名</span>';
+              } else {
+                var counts = "社員 " + day.emp + "名・アルバイト " + day.alb + "名";
+                if (day.other > 0) counts += "・他 " + day.other + "名";
+                inner += '<span class="counts">' + counts + "</span>";
+              }
+              if (state.filters.name.trim()) {
+                var hit = filteredWorkers(day);
+                var hitN = hit.emp.length + hit.alb.length + hit.other.length;
+                if (hitN > 0) inner += '<span class="hit-dot">● ' + esc(state.filters.name.trim()) + " 出勤</span>";
+              }
+            } else if (state.loading) {
+              inner += '<span class="counts">…</span>';
+            }
+            html += '<button type="button" class="' + cls.join(" ") + '" data-date="' + key + '" aria-label="' +
+              dt.getFullYear() + "年" + (dt.getMonth() + 1) + "月" + dt.getDate() + "日（" + WD[dow] + "）の内訳を見る\">" +
+              inner + "</button>";
+          }
+          html += "</div>";
+          var lastDt = new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + 6);
+          if (lastDt.getFullYear() === y && lastDt.getMonth() === m - 1 && w >= 4) break;
+          if (lastDt.getMonth() !== m - 1 && lastDt.getFullYear() !== y) break;
+          var probe = new Date(start.getFullYear(), start.getMonth(), start.getDate() + (w + 1) * 7);
+          if (probe.getMonth() !== m - 1 && probe > first) {
+            // 次の週がすべて翌月なら終了（ただし当月最終日を含む週までは出す）
+            var lastDay = new Date(y, m, 0);
+            if (probe > lastDay) break;
+          }
+        }
+        els.cal.innerHTML = html;
+        Array.prototype.forEach.call(els.cal.querySelectorAll(".cell"), function (btn) {
+          btn.addEventListener("click", function () {
+            selectDay(btn.getAttribute("data-date"), true);
+          });
+        });
+        renderDayDetail();
+      }
+
+      function dayTitle(key) {
+        var p = parseKey(key);
+        var dow = new Date(p.y, p.m - 1, p.d).getDay();
+        return p.y + "年" + p.m + "月" + p.d + "日（" + WD[dow] + "）";
+      }
+
+      function workersHtml(day, headingLevel) {
+        var workers = filteredWorkers(day);
+        var html = "";
+        activeCats().forEach(function (c) {
+          var list = workers[c.key];
+          html += "<h3>" + c.label + '<span class="n">' + list.length + "名</span></h3>";
+          if (!list.length) {
+            html += '<p class="empty-note">なし</p>';
+          } else {
+            html += '<ul class="names">' + list.map(function (p) {
+              return "<li>" + esc(p.name) + marksHtml(p.marks) + "</li>";
+            }).join("") + "</ul>";
+          }
+        });
+        var offs = (day.off || []).map(splitOff).filter(function (p) { return nameHit(p.name); });
+        html += '<div class="offbox"><h3>休みの人<span class="n">' + offs.length + "名</span></h3>";
+        if (!offs.length) {
+          html += '<p class="empty-note">なし</p>';
+        } else {
+          html += '<ul class="names">' + offs.map(function (p) {
+            return "<li>" + esc(p.name) + (p.type ? ' <span class="off-type">（' + esc(p.type) + "）</span>" : "") + "</li>";
+          }).join("") + "</ul>";
+        }
+        html += "</div>";
+        return html;
+      }
+
+      function renderDayDetail() {
+        var key = state.selected;
+        var day = state.byDate[key];
+        var html = "<h2>" + dayTitle(key) + "</h2>";
+        if (!day) {
+          html += state.loading
+            ? '<p class="empty-note">読み込み中です…</p>'
+            : '<p class="empty-note">この日のデータはありません（表示期間は ' +
+              (state.data && state.data.days.length
+                ? state.data.days[0].date.replace(/\//g, "/") + " 〜 " + state.data.days[state.data.days.length - 1].date
+                : "—") + " です）。</p>";
+        } else if (isClosed(day)) {
+          html += '<div class="closed-banner">休業日（年始休業日）― 出勤者 0名</div>';
+          var offsC = (day.off || []).map(splitOff);
+          if (offsC.length) {
+            html += '<div class="offbox"><h3>休みの人<span class="n">' + offsC.length + '名</span></h3><ul class="names">' +
+              offsC.map(function (p) {
+                return "<li>" + esc(p.name) + (p.type ? ' <span class="off-type">（' + esc(p.type) + "）</span>" : "") + "</li>";
+              }).join("") + "</ul></div>";
+          }
+        } else {
+          html += workersHtml(day);
+        }
+        els["day-detail"].innerHTML = html;
+      }
+
+      function selectDay(key, scroll) {
+        state.selected = key;
+        var p = parseKey(key);
+        if (p.y !== state.cursor.y || p.m !== state.cursor.m) {
+          state.cursor = { y: p.y, m: p.m };
+        }
+        state.weekStart = weekStartOf(new Date(p.y, p.m - 1, p.d));
+        if (state.view === "month") renderMonth();
+        else if (state.view === "week") renderWeek();
+        if (scroll && state.view === "month") {
+          els["day-detail"].scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }
+
+      /* ============ 週表示 ============ */
+      function weekStartOf(dt) {
+        var d = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+        d.setDate(d.getDate() - ((d.getDay() - state.weekStartDay + 7) % 7));
+        return d;
+      }
+      /* ============ 週表示（人×曜日の表） ============ */
+      function shortMark(m) {
+        if (m === "半日") return "半";
+        if (m === "臨時") return "臨";
+        if (m === "土曜追加") return "土";
+        return m;
+      }
+      function weekCell(p, wd) {
+        if (wd.day && isClosed(wd.day)) return '<td class="m-closed">―</td>';
+        var w = null, o = null, i;
+        for (i = 0; i < p.days.length; i++) if (p.days[i].date === wd.key) { w = p.days[i]; break; }
+        if (w) {
+          var cls = "m-work", label = "○";
+          if (w.marks && w.marks.length) {
+            label = w.marks.map(shortMark).join("・");
+            if (w.marks.indexOf("半日") >= 0) cls = "m-half";
+            else if (w.marks.indexOf("臨時") >= 0) cls = "m-temp";
+            else if (w.marks.indexOf("土曜追加") >= 0) cls = "m-sat";
+          }
+          return '<td class="' + cls + '">' + esc(label) + "</td>";
+        }
+        for (i = 0; i < p.offDays.length; i++) if (p.offDays[i].date === wd.key) { o = p.offDays[i]; break; }
+        if (o) return '<td class="m-off" title="' + esc(o.type || "休み") + '">休</td>';
+        return "<td></td>";
+      }
+      function renderWeek() {
+        var ws = state.weekStart;
+        var we = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 6);
+        els["period-label"].textContent =
+          ws.getFullYear() + "年" + (ws.getMonth() + 1) + "月" + ws.getDate() + "日 〜 " +
+          (we.getMonth() + 1) + "月" + we.getDate() + "日";
+        els["ym-wrap"].hidden = true;
+        els["day-wrap"].hidden = true;
+        if (!state.data) {
+          els["view-week"].innerHTML = '<div class="panel"><p class="empty-note">' +
+            (state.loading ? "読み込み中です…" : "データを読み込めませんでした。") + "</p></div>";
+          return;
+        }
+        var today = todayKey();
+        var days = [];
+        for (var i = 0; i < 7; i++) {
+          var dt = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + i);
+          var key = fmtKey(dt.getFullYear(), dt.getMonth() + 1, dt.getDate());
+          days.push({ dt: dt, key: key, day: state.byDate[key] });
+        }
+        var people = peopleIndex().filter(function (p) {
+          return days.some(function (wd) {
+            return p.days.some(function (d) { return d.date === wd.key; }) ||
+              p.offDays.some(function (d) { return d.date === wd.key; });
+          });
+        });
+        var html = '<div class="matrix-wrap"><table class="matrix"><thead><tr><th class="m-name">名前</th>';
+        days.forEach(function (wd) {
+          var dow = wd.dt.getDay();
+          var cls = dow === 0 ? "sun" : dow === 6 ? "sat" : "";
+          if (wd.key === today) cls += " today";
+          var head = (wd.dt.getMonth() + 1) + "/" + wd.dt.getDate() + "（" + WD[dow] + "）";
+          var sub;
+          if (!wd.day) sub = "データなし";
+          else if (isClosed(wd.day)) sub = "休業日";
+          else {
+            sub = "社員" + wd.day.emp + "・アル" + wd.day.alb;
+            if (wd.day.other > 0) sub += "・他" + wd.day.other;
+          }
+          html += '<th class="' + cls.trim() + '">' + head + '<span class="m-counts">' + sub + "</span></th>";
+        });
+        html += "</tr></thead><tbody>";
+        if (!people.length) {
+          html += '<tr><td colspan="8" class="m-empty">条件に合う人がいません。</td></tr>';
+        }
+        CATS.forEach(function (c) {
+          var list = people.filter(function (p) { return p.cat === c.key; });
+          if (!list.length) return;
+          html += '<tr class="m-cat"><td colspan="8">' + c.label + "</td></tr>";
+          list.forEach(function (p) {
+            var workN = 0, offN = 0;
+            days.forEach(function (wd) {
+              if (p.days.some(function (d) { return d.date === wd.key; })) workN++;
+              else if (p.offDays.some(function (d) { return d.date === wd.key; })) offN++;
+            });
+            var sub2 = "出勤" + workN + "日" + (offN ? "・休み" + offN + "日" : "");
+            html += '<tr><th class="m-name">' + esc(p.name) + '<span class="m-sub">' + sub2 + "</span></th>";
+            days.forEach(function (wd) { html += weekCell(p, wd); });
+            html += "</tr>";
+          });
+        });
+        html += "</tbody></table></div>";
+        html += '<p class="matrix-legend">○ 出勤　半 半日　臨 臨時出勤　土 土曜追加　休 休み（種類はセルにカーソルを合わせると表示）　― 休業日</p>';
+        els["view-week"].innerHTML = html;
+      }
+
+      /* ============ 人別表示 ============ */
+      function peopleIndex() {
+        var map = {}, order = [];
+        if (!state.data) return [];
+        state.data.days.forEach(function (day) {
+          CATS.forEach(function (c) {
+            (day[c.list] || []).forEach(function (raw) {
+              var p = splitMarks(raw);
+              var id = c.key + ":" + p.name;
+              if (!map[id]) {
+                map[id] = { name: p.name, cat: c.key, catLabel: c.label, days: [], offDays: [] };
+                order.push(id);
+              }
+              map[id].days.push({ date: day.date, weekday: day.weekday, marks: p.marks, closed: isClosed(day) });
+            });
+          });
+          (day.off || []).forEach(function (raw) {
+            var p = splitOff(raw);
+            /* 休みだけに現れる人も拾う（区分は出勤実績がある区分を優先） */
+            var found = null;
+            order.forEach(function (id) { if (map[id].name === p.name) found = map[id]; });
+            if (found) found.offDays.push({ date: day.date, weekday: day.weekday, type: p.type });
+          });
+        });
+        return order.map(function (id) { return map[id]; })
+          .filter(function (p) {
+            return state.filters[p.cat] && nameHit(p.name);
+          })
+          .sort(function (a, b) {
+            if (a.cat !== b.cat) return CATS.findIndex(function (c) { return c.key === a.cat; }) -
+              CATS.findIndex(function (c) { return c.key === b.cat; });
+            return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+          });
+      }
+
+      function renderPerson() {
+        els["period-label"].textContent = "人別 ― 出勤日一覧";
+        els["ym-wrap"].hidden = true;
+        els["day-wrap"].hidden = true;
+        if (!state.data) {
+          els["person-list"].innerHTML = '<div class="panel"><p class="empty-note">' +
+            (state.loading ? "読み込み中です…" : "データを読み込めませんでした。") + "</p></div>";
+          els["person-detail"].hidden = true;
+          return;
+        }
+        var people = peopleIndex();
+        if (!people.length) {
+          els["person-list"].innerHTML = '<div class="panel"><p class="empty-note">条件に合う人がいません。</p></div>';
+        } else {
+          els["person-list"].innerHTML = people.map(function (p, idx) {
+            return '<button type="button" class="person-row" data-idx="' + idx + '">' +
+              '<span class="pname">' + esc(p.name) + '</span>' +
+              '<span class="cat-tag">' + p.catLabel + "</span>" +
+              '<span class="pcount">出勤 ' + p.days.length + "日" +
+              (p.offDays.length ? "／休み " + p.offDays.length + "日" : "") + "</span></button>";
+          }).join("");
+          Array.prototype.forEach.call(els["person-list"].querySelectorAll(".person-row"), function (btn) {
+            btn.addEventListener("click", function () {
+              state.person = people[+btn.getAttribute("data-idx")];
+              renderPersonDetail();
+              els["person-detail"].scrollIntoView({ block: "nearest", behavior: "smooth" });
+            });
+          });
+        }
+        renderPersonDetail();
+      }
+
+      function renderPersonDetail() {
+        var p = state.person;
+        if (!p || !state.data) { els["person-detail"].hidden = true; return; }
+        /* 最新データで引き直す */
+        var fresh = peopleIndex().filter(function (x) { return x.name === p.name && x.cat === p.cat; })[0] || p;
+        state.person = fresh;
+        var html = "<h2>" + esc(fresh.name) + ' <span class="cat-tag">' + fresh.catLabel + "</span></h2>";
+        html += "<h3>出勤日<span class='n'>" + fresh.days.length + "日</span></h3>";
+        if (!fresh.days.length) html += '<p class="empty-note">期間内の出勤はありません。</p>';
+        else {
+          html += '<div class="person-dates">' + fresh.days.map(function (d) {
+            var pp = parseKey(d.date);
+            var dow = new Date(pp.y, pp.m - 1, pp.d).getDay();
+            return '<span class="pday' + (dow === 0 ? " sun" : dow === 6 ? " sat" : "") + '">' +
+              pp.m + "/" + pp.d + "（" + WD[dow] + "）" + marksHtml(d.marks) + "</span>";
+          }).join("") + "</div>";
+        }
+        if (fresh.offDays.length) {
+          html += "<h3>休みの日<span class='n'>" + fresh.offDays.length + "日</span></h3>";
+          html += '<div class="person-dates">' + fresh.offDays.map(function (d) {
+            var pp = parseKey(d.date);
+            var dow = new Date(pp.y, pp.m - 1, pp.d).getDay();
+            return '<span class="pday">' + pp.m + "/" + pp.d + "（" + WD[dow] + "）" +
+              (d.type ? ' <span class="off-type">' + esc(d.type) + "</span>" : "") + "</span>";
+          }).join("") + "</div>";
+        }
+        els["person-detail"].innerHTML = html;
+        els["person-detail"].hidden = false;
+      }
+
+      /* ============ 全体描画・操作 ============ */
+      function renderAll() {
+        renderStatus();
+        els["view-month"].hidden = state.view !== "month";
+        els["view-week"].hidden = state.view !== "week";
+        els["view-person"].hidden = state.view !== "person";
+        els["tab-month"].setAttribute("aria-pressed", state.view === "month");
+        els["tab-week"].setAttribute("aria-pressed", state.view === "week");
+        els["tab-person"].setAttribute("aria-pressed", state.view === "person");
+        els["weekstart-select"].value = String(state.weekStartDay);
+        var isMonth = state.view === "month";
+        els["ym-wrap"].hidden = !isMonth;
+        els["day-wrap"].hidden = !isMonth;
+        if (isMonth) renderMonth();
+        else if (state.view === "week") renderWeek();
+        else renderPerson();
+        els["updated-at"].textContent = state.data && state.data.updatedAt
+          ? "更新日時：" + formatUpdatedAt(state.data.updatedAt)
+          : (state.loading ? "更新日時：読み込み中…" : "更新日時：―");
+        saveViewerState();
+      }
+
+      function setView(v) {
+        state.view = v;
+        renderAll();
+      }
+
+      function init() {
+        var t = new Date();
+        state.cursor = { y: t.getFullYear(), m: t.getMonth() + 1 };
+        state.selected = todayKey();
+        state.weekStart = weekStartOf(t);
+
+        els["tab-month"].addEventListener("click", function () { setView("month"); });
+        els["tab-week"].addEventListener("click", function () { setView("week"); });
+        els["tab-person"].addEventListener("click", function () { setView("person"); });
+        els["reload-btn"].addEventListener("click", load);
+        els["f-emp"].addEventListener("change", function () { state.filters.emp = this.checked; renderAll(); });
+        els["f-alb"].addEventListener("change", function () { state.filters.alb = this.checked; renderAll(); });
+        els["f-other"].addEventListener("change", function () { state.filters.other = this.checked; renderAll(); });
+        els["f-name"].addEventListener("input", function () { state.filters.name = this.value; renderAll(); });
+        els["ym-select"].addEventListener("change", function () {
+          var p = this.value.split("/");
+          state.cursor = { y: +p[0], m: +p[1] };
+          var sel = parseKey(state.selected);
+          state.selected = fmtKey(state.cursor.y, state.cursor.m, Math.min(sel.d, new Date(state.cursor.y, state.cursor.m, 0).getDate()));
+          renderAll();
+        });
+        els["day-select"].addEventListener("change", function () { selectDay(this.value, false); });
+        els["nav-today"].addEventListener("click", function () {
+          var t2 = new Date();
+          state.cursor = { y: t2.getFullYear(), m: t2.getMonth() + 1 };
+          state.weekStart = weekStartOf(t2);
+          selectDay(todayKey(), false);
+          renderAll();
+        });
+        els["nav-prev"].addEventListener("click", function () { move(-1); });
+        els["nav-next"].addEventListener("click", function () { move(1); });
+        els["weekstart-select"].addEventListener("change", function () {
+          state.weekStartDay = +this.value;
+          /* 選んでいる日を含む週を、新しい始まりの曜日で取り直す */
+          var sel = parseKey(state.selected);
+          state.weekStart = weekStartOf(new Date(sel.y, sel.m - 1, sel.d));
+          renderAll();
+        });
+
+        renderAll(); /* 読み込み前から枠と日付選択を出す */
+        load();
+      }
+
+      function move(dir) {
+        if (state.view === "month") {
+          var m = state.cursor.m + dir, y = state.cursor.y;
+          if (m < 1) { m = 12; y--; } if (m > 12) { m = 1; y++; }
+          state.cursor = { y: y, m: m };
+          var sel = parseKey(state.selected);
+          state.selected = fmtKey(y, m, Math.min(sel.d, new Date(y, m, 0).getDate()));
+          state.weekStart = weekStartOf(new Date(y, m - 1, parseKey(state.selected).d));
+        } else if (state.view === "week") {
+          state.weekStart = new Date(state.weekStart.getFullYear(), state.weekStart.getMonth(),
+            state.weekStart.getDate() + dir * 7);
+          var s = state.weekStart;
+          state.selected = fmtKey(s.getFullYear(), s.getMonth() + 1, s.getDate());
+          state.cursor = { y: s.getFullYear(), m: s.getMonth() + 1 };
+        }
+        renderAll();
+      }
+
+      init();
+    </script>
+  </body>
+</html>
