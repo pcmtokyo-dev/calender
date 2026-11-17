@@ -48,7 +48,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー</div>
-<div class="version">rinji ver.11 2026-11-17 正式版・説明を外す</div>
+<div class="version">rinji ver.12 2026-11-17 代行手配済みを表示</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -152,7 +152,7 @@ var sub = [];
 if (d.finals) sub.push("最終作業日 " + d.finals + "件");
 if (d.unknown) sub.push("要確認 " + d.unknown + "件");
 html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
-+ '<div class="d">' + label + '　出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）・' + daiS + rateS + '・臨時可能 ' + d.avail + '人</div>'
++ '<div class="d">' + label + '　出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）・' + daiS + rateS + '・臨時可能 ' + d.avail + '人' + (d.covered ? '・代行手配済み ' + d.covered + '件' : '') + '</div>'
 + '<div class="n">代行の内訳：休暇' + d.uncovered + '・部分代行' + partial + '・' + undecS + '　休み ' + d.off + '人</div>'
 + (sub.length ? '<div class="s">' + sub.join('　') + '</div>' : '')
 + '</div>';
@@ -196,7 +196,7 @@ var dt = parseKinmuDate(d.date);
 var daiS = d.undecGomi ? '代行 ' + d.shortage + '件（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '代行 ' + d.shortage + '件';
 var rateS = d.rate == null ? '' : '・1人あたり' + d.rate.toFixed(1) + '件';
 var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・" + daiS + rateS + "・臨時可能 " + d.avail + "人</h3>";
-html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　実働 " + d.effective + "人（半日 " + d.halfDay + "人）　休み " + d.off + "人　臨可 " + d.avail + "人　代行済み " + d.covered + "件</div>";
+html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　実働 " + d.effective + "人（半日 " + d.halfDay + "人）　休み " + d.off + "人　臨可 " + d.avail + "人　代行手配済み " + d.covered + "件</div>";
 html += '<div class="sec-label">代行が必要な内訳（臨時募集の対象）</div>';
 var partial = d.partialGomi + d.partialWork;
 var undecS = d.undecGomi ? '未決 ' + d.undec + '件（ゴミのみ' + d.undecGomi + '件・全部' + d.undecFull + '件）' : '未決 ' + d.undec + '件';
