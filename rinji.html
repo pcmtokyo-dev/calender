@@ -20,11 +20,11 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 .month-head { font-size: 10px; text-align: center; padding: 6px 0; font-weight: bold; background: #f1f3f4;}
 .cell { background: #fff; min-height: 64px; padding: 2px; cursor: pointer; overflow: hidden;}
 .cell.other { background: #f8f9fa;}
-.cell.lv1 { background: #fff7cc;}
-.cell.lv2 { background: #ffe98a;}
-.cell.lv3 { background: #ffcf5c;}
-.cell.lv4 { background: #ff9e4d;}
-.cell.lv5 { background: #e53935;}
+.cell.lv1 { background: #ffecb3;}
+.cell.lv2 { background: #ffe082;}
+.cell.lv3 { background: #ffca28;}
+.cell.lv4 { background: #fb8c00;}
+.cell.lv5 { background: #b71c1c;}
 .cell.sel { outline: 2px solid #1a73e8; outline-offset: -2px;}
 .cell.num { font-size: 11px; font-weight: bold; text-align: center;}
 .cell.bad { font-size: 11px; font-weight: bold; text-align: center; margin-top: 2px;}
@@ -46,7 +46,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー</div>
-<div class="version">rinji ver.16 2026-11-17 色をグラデーション・色弱配慮</div>
+<div class="version">rinji ver.17 2026-11-17 深い赤で読みやすく・落ち着いた色</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -64,7 +64,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 // 事前計算した「臨時募集用」タブを kinmu API (?action=rinji) から読むだけ。
 // 集計は GAS（rinji-calendar-refresh.gs）が30分おきに行う。
 // 未決物件も代行に数える。代行合計 ＝ 代行なし ＋ 部分代行 ＋ 未決。
-// カレンダーの色は1人あたりの負担率（負担件数 ÷ 実働人数）で6段階に決まる。実働人数 ＝ 出勤人数 − 半日 × 0.5。出勤0人の日は一番濃い赤（12/31〜1/3は例外で一番薄い黄）。色は明るさでも段階が分かるようにし、代行件数の数字も必ず出すので色だけに頼らない。
+// カレンダーの色は1人あたりの負担率（負担件数 ÷ 実働人数）で6段階に決まる。実働人数 ＝ 出勤人数 − 半日 × 0.5。出勤0人の日は一番濃い赤（12/31〜1/3は例外で一番薄い黄）。一番濃い色は深い赤にして白文字をはっきり読めるようにし、一番薄い黄も白と区別が付く濃さにした。色は明るさでも段階が分かるようにし、代行件数の数字も必ず出すので色だけに頼らない。
 // 負担件数 ＝ 代行 − ゴミのみ × 2/3（ゴミ出しのみは3件で1件分）。
 var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec?action=rinji";
 var WD = ["日", "月", "火", "水", "木", "金", "土"];
