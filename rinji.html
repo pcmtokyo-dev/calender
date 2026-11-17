@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>臨時募集カレンダー（試作）</title>
+<title>臨時募集カレンダー</title>
 <style>
 * { box-sizing: border-box;}
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #fff; color: #3c4043;}
@@ -16,8 +16,6 @@ button.active { background: #1a73e8; color: #fff; border-color: #1a73e8;}
 .updated { text-align: center; font-size: 11px; color: #5f6368; margin-top: 6px;}
 .body { padding: 8px; padding-bottom: 80px; max-width: 900px; margin: 0 auto;}
 h2 { font-size: 14px; margin: 16px 4px 8px;}
-.rules { font-size: 12px; line-height: 1.7; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 12px; margin: 8px 4px;}
-.rules b { color: #1a73e8;}
 .pinch-row { border: 1px solid #e0e0e0; border-left: 5px solid #9aa0a6; border-radius: 6px; padding: 10px 12px; margin: 6px 4px; cursor: pointer; background: #fff;}
 .pinch-row.lv3 { border-left-color: #C73836; background: #fdf3f2;}
 .pinch-row.lv2 { border-left-color: #E67E22; background: #fef8f1;}
@@ -49,8 +47,8 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 </head>
 <body>
 <div class="header">
-<div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.10 2026-11-17 ゴミ出しのみは3件で1件分</div>
+<div class="title">臨時募集カレンダー</div>
+<div class="version">rinji ver.11 2026-11-17 正式版・説明を外す</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -59,11 +57,6 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <div class="updated" id="updated">読み込み中…</div>
 </div>
 <div class="body">
-<div class="rules">
-<b>代行の数え方（2026-11-17決定）</b><br>
-代行 ＝ 休暇のうち「エリア代行：なし」＋「ゴミ出しのみ／作業のみ代行」（残りの作業はまだ誰も決まっていない）＋未決物件。「代行あり・全て」は数えません。元のカレンダーの休暇表示は消しません。ここで消えるのは数え方だけです。<br>
-ピンチ順は、1人あたりの代行件数（代行÷実働人数）の多い順です。実働人数は、出勤人数から半日の人を0.5人分として引いたものです。土曜は半日の人が多いので、人数よりきつく出ます。ゴミ出しのみの代行は軽いので、3件で1件分として数えます（負担率の計算だけ。代行の件数表示はそのままです）。最終作業日は別枠です。2名現場の区別はまだ入っていません。集計は30分おきにスプレッドシートへ書き込んだものを読んでいます。未決にゴミ出しのみがある日は、代行の横に未決の内訳「（ゴミのみ○・全部○）」を出します。
-</div>
 <h2>ピンチ順（この月・今日以降）</h2>
 <div id="pinch-list"><div class="status">読み込み中…</div></div>
 <h2>月表示</h2>
