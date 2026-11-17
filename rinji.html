@@ -16,17 +16,13 @@ button.active { background: #1a73e8; color: #fff; border-color: #1a73e8;}
 .updated { text-align: center; font-size: 11px; color: #5f6368; margin-top: 6px;}
 .body { padding: 8px; padding-bottom: 80px; max-width: 900px; margin: 0 auto;}
 h2 { font-size: 14px; margin: 16px 4px 8px;}
-.pinch-row { border: 1px solid #e0e0e0; border-left: 5px solid #9aa0a6; border-radius: 6px; padding: 10px 12px; margin: 6px 4px; cursor: pointer; background: #fff;}
-.pinch-row.lv3 { border-left-color: #C73836; background: #fdf3f2;}
-.pinch-row.lv2 { border-left-color: #E67E22; background: #fef8f1;}
-.pinch-row.lv1 { border-left-color: #F2C037;}
-.pinch-row.d { font-size: 14px; font-weight: bold;}
-.pinch-row.n { font-size: 13px; margin-top: 2px;}
-.pinch-row.s { font-size: 12px; color: #5f6368; margin-top: 2px;}
 .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #e0e0e0; border: 1px solid #e0e0e0; margin: 4px;}
 .month-head { font-size: 10px; text-align: center; padding: 6px 0; font-weight: bold; background: #f1f3f4;}
 .cell { background: #fff; min-height: 64px; padding: 2px; cursor: pointer; overflow: hidden;}
 .cell.other { background: #f8f9fa;}
+.cell.lv3 { background: #fdeceb;}
+.cell.lv2 { background: #fef5e7;}
+.cell.lv1 { background: #fefce8;}
 .cell.sel { outline: 2px solid #1a73e8; outline-offset: -2px;}
 .cell.num { font-size: 11px; font-weight: bold; text-align: center;}
 .cell.bad { font-size: 11px; font-weight: bold; text-align: center; margin-top: 2px;}
@@ -48,7 +44,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー</div>
-<div class="version">rinji ver.14 2026-11-17 シンプル表示・カレンダーを上に</div>
+<div class="version">rinji ver.15 2026-11-17 カレンダーに色・ピンチ順を外す</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -59,16 +55,14 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <div class="body">
 <h2>月表示</h2>
 <div id="month-view"><div class="status">読み込み中…</div></div>
-<h2>ピンチ順（この月・今日以降）</h2>
-<div id="pinch-list"><div class="status">読み込み中…</div></div>
 <h2>日の内訳</h2>
-<div id="day-detail"><div class="status">上の月表示かピンチ順から日を選んでください。</div></div>
+<div id="day-detail"><div class="status">上の月表示から日を選んでください。</div></div>
 </div>
 <script>
 // 事前計算した「臨時募集用」タブを kinmu API (?action=rinji) から読むだけ。
 // 集計は GAS（rinji-calendar-refresh.gs）が30分おきに行う。
 // 未決物件も代行に数える。代行合計 ＝ 代行なし ＋ 部分代行 ＋ 未決。
-// ピンチ順は出勤0人の日が一番上（12/31〜1/3は例外で一番下）、それ以外は1人あたりの負担率（負担件数 ÷ 実働人数）の多い順。実働人数 ＝ 出勤人数 − 半日 × 0.5。
+// カレンダーの色は1人あたりの負担率（負担件数 ÷ 実働人数）で決まる。実働人数 ＝ 出勤人数 − 半日 × 0.5。出勤0人の日は赤（12/31〜1/3は例外で黄）。
 // 負担件数 ＝ 代行 − ゴミのみ × 2/3（ゴミ出しのみは3件で1件分）。
 var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec?action=rinji";
 var WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -106,9 +100,6 @@ var p = dateStr.split("/");
 var m = parseInt(p[1], 10), dd = parseInt(p[2], 10);
 return (m === 12 && dd === 31) || (m === 1 && dd <= 3);
 }
-function todayKey() {
-return fmtDate(new Date());
-}
 
 function buildDays(rows) {
 daysMap = {};
@@ -137,24 +128,6 @@ function render() {
 var y = curYear, m = curMonth; // m は 0始まり
 document.getElementById("updated").textContent =
 "対象: " + y + "年" + (m + 1) + "月" + (rinjiUpdated ? " ／ 更新: " + fmtUpdated(rinjiUpdated) : "");
-// ピンチ順（表示中の月・今日以降だけ）
-var tk = todayKey();
-var list = Object.keys(daysMap).map(function (k) { return daysMap[k]; })
-.filter(function (d) { var dt = parseKinmuDate(d.date); return dt.getFullYear() === y && dt.getMonth() === m && d.date >= tk; })
-.sort(function (a, b) { function grp(d) { if (d.rate == null) return isYearEndClosed(d.date) ? 2 : 0; return 1; } var ga = grp(a), gb = grp(b); if (ga !== gb) return ga - gb; if (ga === 1 && b.rate !== a.rate) return b.rate - a.rate; return b.shortage - a.shortage || a.total - b.total; });
-var html = "";
-var shown = 0;
-list.forEach(function (d) {
-if (d.shortage === 0) return;
-shown++;
-var dt = parseKinmuDate(d.date);
-var label = d.date.slice(5) + " (" + WD[dt.getDay()] + ")";
-html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
-+ '<div class="d">' + label + '　出勤 ' + d.total + '人・代行 ' + d.shortage + '件</div>'
-+ '</div>';
-});
-if (!shown) html = '<div class="status">この月は代行が必要なものは0件です。</div>';
-document.getElementById("pinch-list").innerHTML = html;
 // 月表示
 var first = new Date(y, m, 1);
 var start = new Date(y, m, 1 - first.getDay());
@@ -170,7 +143,7 @@ var d = daysMap[key];
 var other = cur.getMonth() !== m ? " other" : "";
 if (d) {
 var lv = "lv" + d.level;
-cells += '<div class="cell' + other + '" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
+cells += '<div class="cell' + other + ' ' + lv + '" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
 + '<div class="num">' + cur.getDate() + '</div>'
 + '<div class="bad ' + lv + '">' + (d.shortage > 0 ? "代行" + d.shortage : "—") + '</div></div>';
 } else {
@@ -216,7 +189,6 @@ document.getElementById("day-detail").scrollIntoView({ block: "nearest" });
 function loadMonth(y, m) {
 curYear = y; curMonth = m;
 if (loaded) { render(); return; }
-document.getElementById("pinch-list").innerHTML = '<div class="status">読み込み中…</div>';
 document.getElementById("month-view").innerHTML = '<div class="status">読み込み中…</div>';
 document.getElementById("updated").textContent = "読み込み中…";
 fetch(KINMU_API).then(function (r) { return r.json(); }).then(function (res) {
@@ -225,8 +197,7 @@ buildDays(res.days || []);
 loaded = true;
 render();
 }).catch(function (e) {
-document.getElementById("pinch-list").innerHTML = '<div class="status">読み込みに失敗しました。もう一度お試しください。</div>';
-document.getElementById("month-view").innerHTML = "";
+document.getElementById("month-view").innerHTML = '<div class="status">読み込みに失敗しました。もう一度お試しください。</div>';
 });
 }
 function moveMonth(dir) {
