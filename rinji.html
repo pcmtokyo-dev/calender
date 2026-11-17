@@ -16,19 +16,13 @@ button.active { background: #1a73e8; color: #fff; border-color: #1a73e8;}
 .updated { text-align: center; font-size: 11px; color: #5f6368; margin-top: 6px;}
 .body { padding: 8px; padding-bottom: 80px; max-width: 900px; margin: 0 auto;}
 h2 { font-size: 14px; margin: 16px 4px 8px;}
-.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #e0e0e0; border: 1px solid #e0e0e0; margin: 4px;}
+.month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: #e0e0e0; border: 1px solid #e0e0e0; margin: 4px; border-radius: 8px; overflow: hidden;}
 .month-head { font-size: 10px; text-align: center; padding: 6px 0; font-weight: bold; background: #f1f3f4;}
 .cell { background: #fff; min-height: 64px; padding: 2px; cursor: pointer; overflow: hidden;}
 .cell.other { background: #f8f9fa;}
-.cell.lv1 { background: #ffecb3;}
-.cell.lv2 { background: #ffe082;}
-.cell.lv3 { background: #ffca28;}
-.cell.lv4 { background: #fb8c00;}
-.cell.lv5 { background: #b71c1c;}
 .cell.sel { outline: 2px solid #1a73e8; outline-offset: -2px;}
-.cell.num { font-size: 11px; font-weight: bold; text-align: center;}
-.cell.bad { font-size: 11px; font-weight: bold; text-align: center; margin-top: 2px;}
-.cell.bad.lv5 { color: #fff;}.cell.bad.lv4 { color: #5a2d00;}.cell.bad.lv3 { color: #6b3d00;}.cell.bad.lv2 { color: #7a5c00;}.cell.bad.lv1 { color: #8a6d00;}.cell.bad.lv0 { color: #9aa0a6;}
+.cell .num { font-size: 11px; font-weight: 600; text-align: center; line-height: 1.4;}
+.cell .bad { font-size: 12px; font-weight: 700; text-align: center; margin-top: 2px; line-height: 1.4;}
 .cell.sub { font-size: 9px; text-align: center; color: #5f6368;}
 .detail { border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; margin: 8px 4px; background: #f8f9fa; font-size: 13px; line-height: 1.7;}
 .detail h3 { margin: 0 0 8px; font-size: 14px;}
@@ -46,7 +40,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー</div>
-<div class="version">rinji ver.17 2026-11-17 深い赤で読みやすく・落ち着いた色</div>
+<div class="version">rinji ver.19 2026-11-17 連続グラデーション・デザイン刷新</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -64,7 +58,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 // 事前計算した「臨時募集用」タブを kinmu API (?action=rinji) から読むだけ。
 // 集計は GAS（rinji-calendar-refresh.gs）が30分おきに行う。
 // 未決物件も代行に数える。代行合計 ＝ 代行なし ＋ 部分代行 ＋ 未決。
-// カレンダーの色は1人あたりの負担率（負担件数 ÷ 実働人数）で6段階に決まる。実働人数 ＝ 出勤人数 − 半日 × 0.5。出勤0人の日は一番濃い赤（12/31〜1/3は例外で一番薄い黄）。一番濃い色は深い赤にして白文字をはっきり読めるようにし、一番薄い黄も白と区別が付く濃さにした。色は明るさでも段階が分かるようにし、代行件数の数字も必ず出すので色だけに頼らない。
+// カレンダーの色は1人あたりの負担率（負担件数 ÷ 実働人数）で連続的に決まる。実働人数 ＝ 出勤人数 − 半日 × 0.5。負担率が少し違うだけでも色が少し変わる（1.2と1.4は違う色）。出勤0人の日は一番濃い赤（12/31〜1/3は例外で一番薄い黄）。文字色は背景の明るさで白か濃い字かを決め、日付も「代行N」もその色になる。色は明るさでも段階が分かるようにし、代行件数の数字も必ず出すので色だけに頼らない。
 // 負担件数 ＝ 代行 − ゴミのみ × 2/3（ゴミ出しのみは3件で1件分）。
 var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec?action=rinji";
 var WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -90,15 +84,37 @@ if (isNaN(dt.getTime())) return s || "";
 function p(n) { return ("0" + n).slice(-2); }
 return dt.getFullYear() + "/" + p(dt.getMonth() + 1) + "/" + p(dt.getDate()) + " " + p(dt.getHours()) + ":" + p(dt.getMinutes());
 }
-function levelOf(rate) {
-if (rate == null) return 0;
-if (rate >= 3) return 5;
-if (rate >= 2.5) return 4;
-if (rate >= 2) return 3;
-if (rate >= 1.5) return 2;
-if (rate >= 1) return 1;
-return 0;
+// 負担率からセルの色を連続的に決める（1.2と1.4でも色が変わる）。
+// アンカー（負担率→色）を直線でつなぐ。白→薄い黄→黄→オレンジ→深い赤へ滑らかに変わる。
+var COLOR_STOPS = [
+[0.0, 253, 253, 253],
+[0.5, 254, 248, 225],
+[1.0, 255, 236, 179],
+[1.5, 255, 213, 79],
+[2.0, 255, 183, 0],
+[2.5, 255, 152, 0],
+[3.0, 245, 124, 0],
+[3.5, 230, 74, 25],
+[4.0, 183, 28, 28]
+];
+function colorForRate(rate) {
+if (rate == null) return [183, 28, 28];
+if (rate <= 0) return [253, 253, 253];
+if (rate >= 4) return [183, 28, 28];
+for (var i = 0; i < COLOR_STOPS.length - 1; i++) {
+var a = COLOR_STOPS[i], b = COLOR_STOPS[i + 1];
+if (rate >= a[0] && rate <= b[0]) {
+var t = (rate - a[0]) / (b[0] - a[0]);
+return [Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t), Math.round(a[3] + (b[3] - a[3]) * t)];
 }
+}
+return [183, 28, 28];
+}
+function textColorFor(rgb) {
+var lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+return lum < 150 ? "#ffffff" : "#3c4043";
+}
+function rgbStr(rgb) { return "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")"; }
 function isYearEndClosed(dateStr) {
 var p = dateStr.split("/");
 var m = parseInt(p[1], 10), dd = parseInt(p[2], 10);
@@ -113,7 +129,6 @@ var effective = (r.effective == null ? total : r.effective);
 var gomi = (r.partialGomi || 0) + (r.undecGomi || 0);
 var burden = (r.shortage || 0) - gomi * 2 / 3;
 var rate = effective > 0 ? burden / effective : null;
-var level = rate == null ? ((r.shortage || 0) > 0 ? (isYearEndClosed(r.date) ? 1 : 5) : 0) : levelOf(rate);
 daysMap[r.date] = {
 date: r.date, weekday: r.weekday,
 emp: r.emp || 0, alb: r.alb || 0, other: r.other || 0, total: total,
@@ -122,8 +137,7 @@ off: r.off || 0, avail: r.avail || 0,
 uncovered: r.uncovered || 0, partialGomi: r.partialGomi || 0, partialWork: r.partialWork || 0,
 covered: r.covered || 0, undec: r.undec || 0, undecGomi: r.undecGomi || 0, undecFull: r.undecFull || 0, finals: r.finals || 0,
 staffOff: r.staffOff || 0, unknown: r.unknown || 0, unknownNames: r.unknownNames || [],
-shortage: r.shortage || 0, net: r.net || 0,
-level: level
+shortage: r.shortage || 0, net: r.net || 0
 };
 });
 }
@@ -146,10 +160,20 @@ var key = fmtDate(cur);
 var d = daysMap[key];
 var other = cur.getMonth() !== m ? " other" : "";
 if (d) {
-var lv = "lv" + d.level;
-cells += '<div class="cell' + other + ' ' + lv + '" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
+var bg;
+if (d.rate == null) {
+if ((d.shortage || 0) > 0) {
+bg = isYearEndClosed(d.date) ? colorForRate(1.0) : [183, 28, 28];
+} else {
+bg = [253, 253, 253];
+}
+} else {
+bg = colorForRate(d.rate);
+}
+var fg = textColorFor(bg);
+cells += '<div class="cell' + other + '" style="background:' + rgbStr(bg) + ';color:' + fg + ';" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
 + '<div class="num">' + cur.getDate() + '</div>'
-+ '<div class="bad ' + lv + '">' + (d.shortage > 0 ? "代行" + d.shortage : "—") + '</div></div>';
++ '<div class="bad">' + (d.shortage > 0 ? "代行" + d.shortage : "—") + '</div></div>';
 } else {
 cells += '<div class="cell' + other + '"><div class="num">' + cur.getDate() + '</div></div>';
 }
