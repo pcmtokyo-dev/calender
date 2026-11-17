@@ -50,7 +50,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.8 2026-11-17 代行の横に未決の内訳</div>
+<div class="version">rinji ver.9 2026-11-17 1人あたりの負担率で並べる</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -62,7 +62,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <div class="rules">
 <b>代行の数え方（2026-11-17決定）</b><br>
 代行 ＝ 休暇のうち「エリア代行：なし」＋「ゴミ出しのみ／作業のみ代行」（残りの作業はまだ誰も決まっていない）＋未決物件。「代行あり・全て」は数えません。元のカレンダーの休暇表示は消しません。ここで消えるのは数え方だけです。<br>
-ピンチ順は、代行から臨時可能の人数を引いた数の多い順です（1人1件の目安）。最終作業日は別枠です。2名現場の区別はまだ入っていません。集計は30分おきにスプレッドシートへ書き込んだものを読んでいます。未決にゴミ出しのみがある日は、代行の横に未決の内訳「（ゴミのみ○・全部○）」を出します。
+ピンチ順は、1人あたりの代行件数（代行÷実働人数）の多い順です。実働人数は、出勤人数から半日の人を0.5人分として引いたものです。土曜は半日の人が多いので、人数よりきつく出ます。最終作業日は別枠です。2名現場の区別はまだ入っていません。集計は30分おきにスプレッドシートへ書き込んだものを読んでいます。未決にゴミ出しのみがある日は、代行の横に未決の内訳「（ゴミのみ○・全部○）」を出します。
 </div>
 <h2>ピンチ順（この月・今日以降）</h2>
 <div id="pinch-list"><div class="status">読み込み中…</div></div>
@@ -75,6 +75,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 // 事前計算した「臨時募集用」タブを kinmu API (?action=rinji) から読むだけ。
 // 集計は GAS（rinji-calendar-refresh.gs）が30分おきに行う。
 // 未決物件も代行に数える。代行合計 ＝ 代行なし ＋ 部分代行 ＋ 未決。
+// ピンチ順は1人あたりの負担率（代行 ÷ 実働人数）の多い順。実働人数 ＝ 出勤人数 − 半日 × 0.5。
 var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec?action=rinji";
 var WD = ["日", "月", "火", "水", "木", "金", "土"];
 
@@ -99,10 +100,11 @@ if (isNaN(dt.getTime())) return s || "";
 function p(n) { return ("0" + n).slice(-2); }
 return dt.getFullYear() + "/" + p(dt.getMonth() + 1) + "/" + p(dt.getDate()) + " " + p(dt.getHours()) + ":" + p(dt.getMinutes());
 }
-function levelOf(net) {
-if (net >= 45) return 3;
-if (net >= 40) return 2;
-if (net >= 1) return 1;
+function levelOf(rate) {
+if (rate == null) return 0;
+if (rate >= 3) return 3;
+if (rate >= 2) return 2;
+if (rate >= 1) return 1;
 return 0;
 }
 function todayKey() {
@@ -113,15 +115,19 @@ function buildDays(rows) {
 daysMap = {};
 (rows || []).forEach(function (r) {
 var total = (r.emp || 0) + (r.alb || 0) + (r.other || 0);
+var effective = (r.effective == null ? total : r.effective);
+var rate = effective > 0 ? (r.shortage || 0) / effective : null;
+var level = rate == null ? ((r.shortage || 0) > 0 ? 1 : 0) : levelOf(rate);
 daysMap[r.date] = {
 date: r.date, weekday: r.weekday,
 emp: r.emp || 0, alb: r.alb || 0, other: r.other || 0, total: total,
+halfDay: r.halfDay || 0, effective: effective, rate: rate,
 off: r.off || 0, avail: r.avail || 0,
 uncovered: r.uncovered || 0, partialGomi: r.partialGomi || 0, partialWork: r.partialWork || 0,
 covered: r.covered || 0, undec: r.undec || 0, undecGomi: r.undecGomi || 0, undecFull: r.undecFull || 0, finals: r.finals || 0,
 staffOff: r.staffOff || 0, unknown: r.unknown || 0, unknownNames: r.unknownNames || [],
 shortage: r.shortage || 0, net: r.net || 0,
-level: levelOf(r.net || 0)
+level: level
 };
 });
 }
@@ -134,7 +140,7 @@ document.getElementById("updated").textContent =
 var tk = todayKey();
 var list = Object.keys(daysMap).map(function (k) { return daysMap[k]; })
 .filter(function (d) { var dt = parseKinmuDate(d.date); return dt.getFullYear() === y && dt.getMonth() === m && d.date >= tk; })
-.sort(function (a, b) { return b.net - a.net || b.shortage - a.shortage || a.total - b.total; });
+.sort(function (a, b) { var ra = a.rate == null ? -1 : a.rate, rb = b.rate == null ? -1 : b.rate; return rb - ra || b.shortage - a.shortage || a.total - b.total; });
 var html = "";
 var shown = 0;
 list.forEach(function (d) {
@@ -145,11 +151,12 @@ var label = d.date.slice(5) + " (" + WD[dt.getDay()] + ")";
 var partial = d.partialGomi + d.partialWork;
 var undecS = d.undecGomi ? '未決' + d.undec + '（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '未決' + d.undec;
 var daiS = d.undecGomi ? '代行 ' + d.shortage + '件（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '代行 ' + d.shortage + '件';
+var rateS = d.rate == null ? '' : '・1人あたり' + d.rate.toFixed(1) + '件';
 var sub = [];
 if (d.finals) sub.push("最終作業日 " + d.finals + "件");
 if (d.unknown) sub.push("要確認 " + d.unknown + "件");
 html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
-+ '<div class="d">' + label + '　出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）・' + daiS + '・臨時可能 ' + d.avail + '人</div>'
++ '<div class="d">' + label + '　出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）・' + daiS + rateS + '・臨時可能 ' + d.avail + '人</div>'
 + '<div class="n">代行の内訳：休暇' + d.uncovered + '・部分代行' + partial + '・' + undecS + '　休み ' + d.off + '人</div>'
 + (sub.length ? '<div class="s">' + sub.join('　') + '</div>' : '')
 + '</div>';
@@ -191,8 +198,9 @@ var cell = document.getElementById("cell-" + key.replace(/\//g, "-"));
 if (cell) cell.classList.add("sel");
 var dt = parseKinmuDate(d.date);
 var daiS = d.undecGomi ? '代行 ' + d.shortage + '件（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '代行 ' + d.shortage + '件';
-var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・" + daiS + "・臨時可能 " + d.avail + "人</h3>";
-html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　休み " + d.off + "人　臨可 " + d.avail + "人　代行済み " + d.covered + "件</div>";
+var rateS = d.rate == null ? '' : '・1人あたり' + d.rate.toFixed(1) + '件';
+var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・" + daiS + rateS + "・臨時可能 " + d.avail + "人</h3>";
+html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　実働 " + d.effective + "人（半日 " + d.halfDay + "人）　休み " + d.off + "人　臨可 " + d.avail + "人　代行済み " + d.covered + "件</div>";
 html += '<div class="sec-label">代行が必要な内訳（臨時募集の対象）</div>';
 var partial = d.partialGomi + d.partialWork;
 var undecS = d.undecGomi ? '未決 ' + d.undec + '件（ゴミのみ' + d.undecGomi + '件・全部' + d.undecFull + '件）' : '未決 ' + d.undec + '件';
