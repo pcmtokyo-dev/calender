@@ -48,7 +48,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー</div>
-<div class="version">rinji ver.12 2026-11-17 代行手配済みを表示</div>
+<div class="version">rinji ver.14 2026-11-17 シンプル表示・カレンダーを上に</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -57,18 +57,18 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <div class="updated" id="updated">読み込み中…</div>
 </div>
 <div class="body">
-<h2>ピンチ順（この月・今日以降）</h2>
-<div id="pinch-list"><div class="status">読み込み中…</div></div>
 <h2>月表示</h2>
 <div id="month-view"><div class="status">読み込み中…</div></div>
+<h2>ピンチ順（この月・今日以降）</h2>
+<div id="pinch-list"><div class="status">読み込み中…</div></div>
 <h2>日の内訳</h2>
-<div id="day-detail"><div class="status">上のピンチ順か月表示から日を選んでください。</div></div>
+<div id="day-detail"><div class="status">上の月表示かピンチ順から日を選んでください。</div></div>
 </div>
 <script>
 // 事前計算した「臨時募集用」タブを kinmu API (?action=rinji) から読むだけ。
 // 集計は GAS（rinji-calendar-refresh.gs）が30分おきに行う。
 // 未決物件も代行に数える。代行合計 ＝ 代行なし ＋ 部分代行 ＋ 未決。
-// ピンチ順は1人あたりの負担率（負担件数 ÷ 実働人数）の多い順。実働人数 ＝ 出勤人数 − 半日 × 0.5。
+// ピンチ順は出勤0人の日が一番上（12/31〜1/3は例外で一番下）、それ以外は1人あたりの負担率（負担件数 ÷ 実働人数）の多い順。実働人数 ＝ 出勤人数 − 半日 × 0.5。
 // 負担件数 ＝ 代行 − ゴミのみ × 2/3（ゴミ出しのみは3件で1件分）。
 var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec?action=rinji";
 var WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -101,6 +101,11 @@ if (rate >= 2) return 2;
 if (rate >= 1) return 1;
 return 0;
 }
+function isYearEndClosed(dateStr) {
+var p = dateStr.split("/");
+var m = parseInt(p[1], 10), dd = parseInt(p[2], 10);
+return (m === 12 && dd === 31) || (m === 1 && dd <= 3);
+}
 function todayKey() {
 return fmtDate(new Date());
 }
@@ -113,7 +118,7 @@ var effective = (r.effective == null ? total : r.effective);
 var gomi = (r.partialGomi || 0) + (r.undecGomi || 0);
 var burden = (r.shortage || 0) - gomi * 2 / 3;
 var rate = effective > 0 ? burden / effective : null;
-var level = rate == null ? ((r.shortage || 0) > 0 ? 1 : 0) : levelOf(rate);
+var level = rate == null ? ((r.shortage || 0) > 0 ? (isYearEndClosed(r.date) ? 1 : 3) : 0) : levelOf(rate);
 daysMap[r.date] = {
 date: r.date, weekday: r.weekday,
 emp: r.emp || 0, alb: r.alb || 0, other: r.other || 0, total: total,
@@ -136,7 +141,7 @@ document.getElementById("updated").textContent =
 var tk = todayKey();
 var list = Object.keys(daysMap).map(function (k) { return daysMap[k]; })
 .filter(function (d) { var dt = parseKinmuDate(d.date); return dt.getFullYear() === y && dt.getMonth() === m && d.date >= tk; })
-.sort(function (a, b) { var ra = a.rate == null ? -1 : a.rate, rb = b.rate == null ? -1 : b.rate; return rb - ra || b.shortage - a.shortage || a.total - b.total; });
+.sort(function (a, b) { function grp(d) { if (d.rate == null) return isYearEndClosed(d.date) ? 2 : 0; return 1; } var ga = grp(a), gb = grp(b); if (ga !== gb) return ga - gb; if (ga === 1 && b.rate !== a.rate) return b.rate - a.rate; return b.shortage - a.shortage || a.total - b.total; });
 var html = "";
 var shown = 0;
 list.forEach(function (d) {
@@ -144,17 +149,8 @@ if (d.shortage === 0) return;
 shown++;
 var dt = parseKinmuDate(d.date);
 var label = d.date.slice(5) + " (" + WD[dt.getDay()] + ")";
-var partial = d.partialGomi + d.partialWork;
-var undecS = d.undecGomi ? '未決' + d.undec + '（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '未決' + d.undec;
-var daiS = d.undecGomi ? '代行 ' + d.shortage + '件（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '代行 ' + d.shortage + '件';
-var rateS = d.rate == null ? '' : '・1人あたり' + d.rate.toFixed(1) + '件';
-var sub = [];
-if (d.finals) sub.push("最終作業日 " + d.finals + "件");
-if (d.unknown) sub.push("要確認 " + d.unknown + "件");
 html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
-+ '<div class="d">' + label + '　出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）・' + daiS + rateS + '・臨時可能 ' + d.avail + '人' + (d.covered ? '・代行手配済み ' + d.covered + '件' : '') + '</div>'
-+ '<div class="n">代行の内訳：休暇' + d.uncovered + '・部分代行' + partial + '・' + undecS + '　休み ' + d.off + '人</div>'
-+ (sub.length ? '<div class="s">' + sub.join('　') + '</div>' : '')
++ '<div class="d">' + label + '　出勤 ' + d.total + '人・代行 ' + d.shortage + '件</div>'
 + '</div>';
 });
 if (!shown) html = '<div class="status">この月は代行が必要なものは0件です。</div>';
@@ -176,8 +172,7 @@ if (d) {
 var lv = "lv" + d.level;
 cells += '<div class="cell' + other + '" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
 + '<div class="num">' + cur.getDate() + '</div>'
-+ '<div class="bad ' + lv + '">' + (d.shortage > 0 ? "代行" + d.shortage : "—") + '</div>'
-+ '<div class="sub">出勤' + d.total + '・臨可' + d.avail + '</div></div>';
++ '<div class="bad ' + lv + '">' + (d.shortage > 0 ? "代行" + d.shortage : "—") + '</div></div>';
 } else {
 cells += '<div class="cell' + other + '"><div class="num">' + cur.getDate() + '</div></div>';
 }
