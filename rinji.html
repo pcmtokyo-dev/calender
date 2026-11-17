@@ -50,7 +50,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.2 2026-11-17 試作・出勤／代行／臨時可能で表示</div>
+<div class="version">rinji ver.3 2026-11-17 件数と人数だけの表示</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -243,46 +243,19 @@ var dt = parseKinmuDate(d.date);
 var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・代行 " + d.shortage + "件・臨時可能 " + d.avail.length + "人　ネット " + d.net + "</h3>";
 html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　休み " + d.off.length + "人　臨可 " + d.avail.length + "人　代行済み " + d.covered + "件</div>";
 html += '<div class="sec-label">代行が必要な内訳（臨時募集の対象）</div>';
-if (!d.uncovered.length &&!d.partial.length) {
-html += "<div>代行が必要なものはありません。</div>";
-} else {
-html += "<ul>";
-d.uncovered.forEach(function (it) {
-html += "<li>" + esc(it.title) + "（" + esc(it.crew) + "）<span class='tag all'>全部必要</span></li>";
-});
-d.partial.forEach(function (it) {
-var tag = it.kind === "partial-gomi"
-? "<span class='tag gomi'>ゴミ出しのみ代行・残り必要</span>"
-: "<span class='tag work'>作業のみ代行・残り必要</span>";
-html += "<li>" + esc(it.title) + "（" + esc(it.crew) + "）" + tag + "</li>";
-});
-html += "</ul>";
-}
-if (d.avail.length) {
-html += '<div class="sec-label">臨時可能（アンケート）</div><ul>';
-d.avail.forEach(function (a) { html += "<li>" + esc(a) + "</li>";});
-html += "</ul>";
-}
-if (d.off.length) {
-html += '<div class="sec-label">社員・アルバイトの休み（勤務カレンダー）</div><ul>';
-d.off.forEach(function (o) { html += "<li>" + esc(o) + "</li>";});
-html += "</ul>";
-}
+var gomiN = d.partial.filter(function (it) { return it.kind === "partial-gomi"; }).length;
+var workN = d.partial.length - gomiN;
+html += "<div>代行なし " + d.uncovered.length + "件・部分代行 " + d.partial.length + "件（ゴミ出しのみ代行 " + gomiN + "件・作業のみ代行 " + workN + "件）</div>";
+
+
 if (d.staffOff.length) {
-html += '<div class="sec-label">社員の休みと臨時出勤者（社員休暇カレンダー）</div><ul>';
-d.staffOff.forEach(function (s) { html += "<li>" + esc(s.title) + " → 臨時出勤者：" + esc(s.backup) + "</li>";});
-html += "</ul>";
+html += "<div>社員の休み " + d.staffOff.length + "件（社員休暇カレンダー）</div>";
 }
 if (d.undecCount) {
-html += '<div class="sec-label">未決物件 ' + d.undecCount + '件（別枠・代行の件数には含めない）</div><ul>';
-Object.keys(d.undec).slice(0, 10).forEach(function (n) { html += "<li>" + esc(n) + "</li>";});
-if (d.undecCount > 10) html += "<li>ほか " + (d.undecCount - 10) + "件</li>";
-html += "</ul>";
+html += "<div>未決物件 " + d.undecCount + "件（別枠・代行の件数には含めない）</div>";
 }
 if (d.finals.length) {
-html += '<div class="sec-label">最終作業日</div><ul>';
-d.finals.forEach(function (f) { html += "<li>" + esc(f) + "</li>";});
-html += "</ul>";
+html += "<div>最終作業日 " + d.finals.length + "件（別枠）</div>";
 }
 if (d.unknown.length) {
 html += '<div class="sec-label">要確認（説明に代行の行がなく、代行の件数に数えていない）</div><ul>';
