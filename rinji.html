@@ -50,7 +50,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.3 2026-11-17 件数と人数だけの表示</div>
+<div class="version">rinji ver.4 2026-11-17 更新ペアは1件にまとめる</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -97,6 +97,7 @@ var kinmuUpdated = "";
 // uncovered: 代行なし（全部必要）。partial-gomi / partial-work: 部分代行（残り必要）。
 // covered: 代行あり・全て（数えない）。person: 人だけの休暇（物件なし、数えない）。
 // skip: キャンセル・対応・初回指導。unknown: 説明に代行の行がない（数えない・要確認で出す）。
+// 同じ日・同じ物件・同じクルーの複数件は1つのグループにまとめ、代行あり＞部分代行（ゴミ＋作業の両方なら代行あり）＞代行なし＞要確認の順で1件分だけ数える。休暇が先に入り、あとから代行手配の件が追加される更新ペアのため。
 function classifyLeave(ev) {
 var t = ev.title || "", desc = ev.description || "";
 if (t.indexOf("[キャンセル]")!== -1 || t.indexOf("[対応]")!== -1 || t.indexOf("[初回指導]")!== -1) return "skip";
@@ -112,6 +113,13 @@ return "unknown";
 }
 function cleanTitle(t) {
 return (t || "").replace(/^\s*★\d+\s*/, "").trim();
+}
+function groupTitle(t) {
+return cleanTitle(t).replace(/^\[[^\]]+\]\s*/, "").trim();
+}
+function pickKind(items, kind) {
+for (var i = 0; i < items.length; i++) if (items[i].kind === kind) return items[i];
+return items[0];
 }
 function crewOf(desc) {
 var first = (desc || "").split("\n")[0] || "";
@@ -142,7 +150,7 @@ date: kd.date, weekday: kd.weekday,
 emp: kd.emp, alb: kd.alb, other: kd.other,
 total: (kd.emp || 0) + (kd.alb || 0) + (kd.other || 0),
 off: kd.off || [], avail: kd.avail || [],
-uncovered: [], partial: [], covered: 0, unknown: [],
+uncovered: [], partial: [], covered: 0, unknown: [], leaveGroups: {},
 undec: {}, finals: [], staffOff: []
 };
 });
@@ -151,17 +159,16 @@ kinmuUpdated = kinmu.updatedAt || "";
 var d = new Date(ev.startTime);
 var key = fmtDate(d);
 if (!daysMap[key]) {
-daysMap[key] = { date: key, weekday: WD[d.getDay()], emp: 0, alb: 0, other: 0, total: 0, off: [], avail: [], uncovered: [], partial: [], covered: 0, unknown: [], undec: {}, finals: [], staffOff: []};
+daysMap[key] = { date: key, weekday: WD[d.getDay()], emp: 0, alb: 0, other: 0, total: 0, off: [], avail: [], uncovered: [], partial: [], covered: 0, unknown: [], leaveGroups: {}, undec: {}, finals: [], staffOff: []};
 }
 var day = daysMap[key];
 if (ev.calId === CAL_LEAVE) {
 var c = classifyLeave(ev);
 if (c === "skip" || c === "person") return;
 var item = { title: cleanTitle(ev.title), crew: crewOf(ev.description), kind: c};
-if (c === "uncovered") day.uncovered.push(item);
-else if (c === "partial-gomi" || c === "partial-work") day.partial.push(item);
-else if (c === "covered") day.covered++;
-else day.unknown.push(item);
+var gk = groupTitle(ev.title) + "|" + item.crew;
+if (!day.leaveGroups[gk]) day.leaveGroups[gk] = [];
+day.leaveGroups[gk].push(item);
 } else if (ev.calId === CAL_RETIRE) {
 if ((ev.title || "").indexOf("未決")!== -1) {
 day.undec[(ev.title || "").replace("", "").trim()] = true;
@@ -176,6 +183,17 @@ day.staffOff.push({ title: ev.title, backup: backup});
 });
 Object.keys(daysMap).forEach(function (k) {
 var day = daysMap[k];
+Object.keys(day.leaveGroups).forEach(function (gk) {
+var items = day.leaveGroups[gk];
+var kinds = {};
+items.forEach(function (it) { kinds[it.kind] = true; });
+if (kinds.covered) day.covered++;
+else if (kinds["partial-gomi"] && kinds["partial-work"]) day.covered++;
+else if (kinds["partial-gomi"]) day.partial.push(pickKind(items, "partial-gomi"));
+else if (kinds["partial-work"]) day.partial.push(pickKind(items, "partial-work"));
+else if (kinds.uncovered) day.uncovered.push(pickKind(items, "uncovered"));
+else day.unknown.push(items[0]);
+});
 day.shortage = day.uncovered.length + day.partial.length;
 day.net = Math.max(0, day.shortage - day.avail.length);
 day.undecCount = Object.keys(day.undec).length;
