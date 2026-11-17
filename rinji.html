@@ -50,7 +50,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.1 2026-11-17 試作・不足＝代行なし＋部分代行</div>
+<div class="version">rinji ver.2 2026-11-17 試作・出勤／代行／臨時可能で表示</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -60,9 +60,9 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 </div>
 <div class="body">
 <div class="rules">
-<b>不足の数え方（2026-11-17決定）</b><br>
-不足 ＝ 休暇のうち「エリア代行：なし」＋「ゴミ出しのみ／作業のみ代行」（残りの作業はまだ誰も決まっていない）。「代行あり・全て」は数えません。元のカレンダーの休暇表示は消しません。ここで消えるのは数え方だけです。<br>
-ネット不足 ＝ 不足 − 臨時可能の人数（1人1件として引いた目安）。物件は毎日20〜30件以上あるため、不足数には入れず別枠で出しています。最終作業日も別枠です。2名現場の区別はまだ入っていません。
+<b>代行の数え方（2026-11-17決定）</b><br>
+代行 ＝ 休暇のうち「エリア代行：なし」＋「ゴミ出しのみ／作業のみ代行」（残りの作業はまだ誰も決まっていない）。「代行あり・全て」は数えません。元のカレンダーの休暇表示は消しません。ここで消えるのは数え方だけです。<br>
+ネット ＝ 代行 − 臨時可能の人数（1人1件として引いた目安）。未決物件は毎日20〜30件以上あるため、代行の件数には入れず別枠で出しています。最終作業日も別枠です。2名現場の区別はまだ入っていません。
 </div>
 <h2>ピンチ順（この月）</h2>
 <div id="pinch-list"><div class="status">読み込み中…</div></div>
@@ -199,12 +199,12 @@ shown++;
 var dt = parseKinmuDate(d.date);
 var label = d.date.slice(5) + " (" + WD[dt.getDay()] + ")";
 html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
-+ '<div class="d">' + label + '　不足 ' + d.shortage + '件（なし' + d.uncovered.length + '・部分' + d.partial.length + '）　ネット ' + d.net + '</div>'
-+ '<div class="n">出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）　休み ' + d.off.length + '人　臨可 ' + d.avail.length + '人</div>'
-+ '<div class="s">' + d.undecCount + '件' + (d.finals.length? '　最終作業日 ' + d.finals.length + '件': '') + (d.unknown.length? '　要確認 ' + d.unknown.length + '件': '') + '</div>'
++ '<div class="d">' + label + '　出勤 ' + d.total + '人・代行 ' + d.shortage + '件・臨時可能 ' + d.avail.length + '人</div>'
++ '<div class="n">代行の内訳：代行なし' + d.uncovered.length + '・部分代行' + d.partial.length + '　ネット ' + d.net + '　休み ' + d.off.length + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）</div>'
++ '<div class="s">未決 ' + d.undecCount + '件' + (d.finals.length? '　最終作業日 ' + d.finals.length + '件': '') + (d.unknown.length? '　要確認 ' + d.unknown.length + '件': '') + '</div>'
 + '</div>';
 });
-if (!shown) html = '<div class="status">この月は不足0件です。</div>';
+if (!shown) html = '<div class="status">この月は代行が必要なものは0件です。</div>';
 document.getElementById("pinch-list").innerHTML = html;
 // 月表示
 var first = new Date(y, m, 1);
@@ -223,7 +223,7 @@ if (d) {
 var lv = "lv" + d.level;
 cells += '<div class="cell' + other + '" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
 + '<div class="num">' + cur.getDate() + '</div>'
-+ '<div class="bad ' + lv + '">' + (d.shortage > 0? "不足" + d.shortage: "—") + '</div>'
++ '<div class="bad ' + lv + '">' + (d.shortage > 0? "代行" + d.shortage: "—") + '</div>'
 + '<div class="sub">出勤' + d.total + '・臨可' + d.avail.length + '</div></div>';
 } else {
 cells += '<div class="cell' + other + '"><div class="num">' + cur.getDate() + '</div></div>';
@@ -240,11 +240,11 @@ document.querySelectorAll(".cell.sel").forEach(function (el) { el.classList.remo
 var cell = document.getElementById("cell-" + key.replace(/\//g, "-"));
 if (cell) cell.classList.add("sel");
 var dt = parseKinmuDate(d.date);
-var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　不足 " + d.shortage + "件　ネット " + d.net + "</h3>";
+var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・代行 " + d.shortage + "件・臨時可能 " + d.avail.length + "人　ネット " + d.net + "</h3>";
 html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　休み " + d.off.length + "人　臨可 " + d.avail.length + "人　代行済み " + d.covered + "件</div>";
-html += '<div class="sec-label">不足の内訳（臨時募集の対象）</div>';
+html += '<div class="sec-label">代行が必要な内訳（臨時募集の対象）</div>';
 if (!d.uncovered.length &&!d.partial.length) {
-html += "<div>不足はありません。</div>";
+html += "<div>代行が必要なものはありません。</div>";
 } else {
 html += "<ul>";
 d.uncovered.forEach(function (it) {
@@ -274,7 +274,7 @@ d.staffOff.forEach(function (s) { html += "<li>" + esc(s.title) + " → 臨時�
 html += "</ul>";
 }
 if (d.undecCount) {
-html += '<div class="sec-label">物件 ' + d.undecCount + '件（別枠・不足数には含めない）</div><ul>';
+html += '<div class="sec-label">未決物件 ' + d.undecCount + '件（別枠・代行の件数には含めない）</div><ul>';
 Object.keys(d.undec).slice(0, 10).forEach(function (n) { html += "<li>" + esc(n) + "</li>";});
 if (d.undecCount > 10) html += "<li>ほか " + (d.undecCount - 10) + "件</li>";
 html += "</ul>";
@@ -285,7 +285,7 @@ d.finals.forEach(function (f) { html += "<li>" + esc(f) + "</li>";});
 html += "</ul>";
 }
 if (d.unknown.length) {
-html += '<div class="sec-label">要確認（説明に代行の行がなく、不足に数えていない）</div><ul>';
+html += '<div class="sec-label">要確認（説明に代行の行がなく、代行の件数に数えていない）</div><ul>';
 d.unknown.forEach(function (it) { html += "<li>" + esc(it.title) + "（" + esc(it.crew) + "）<span class='tag chk'>要確認</span></li>";});
 html += "</ul>";
 }
