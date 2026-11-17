@@ -50,7 +50,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.4 2026-11-17 更新ペアは1件にまとめる</div>
+<div class="version">rinji ver.5 2026-11-17 事前計算・未決も代行に数える</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -61,10 +61,10 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <div class="body">
 <div class="rules">
 <b>代行の数え方（2026-11-17決定）</b><br>
-代行 ＝ 休暇のうち「エリア代行：なし」＋「ゴミ出しのみ／作業のみ代行」（残りの作業はまだ誰も決まっていない）。「代行あり・全て」は数えません。元のカレンダーの休暇表示は消しません。ここで消えるのは数え方だけです。<br>
-ネット ＝ 代行 − 臨時可能の人数（1人1件として引いた目安）。未決物件は毎日20〜30件以上あるため、代行の件数には入れず別枠で出しています。最終作業日も別枠です。2名現場の区別はまだ入っていません。
+代行 ＝ 休暇のうち「エリア代行：なし」＋「ゴミ出しのみ／作業のみ代行」（残りの作業はまだ誰も決まっていない）＋未決物件。「代行あり・全て」は数えません。元のカレンダーの休暇表示は消しません。ここで消えるのは数え方だけです。<br>
+ネット ＝ 代行 − 臨時可能の人数（1人1件として引いた目安）。最終作業日は別枠です。2名現場の区別はまだ入っていません。集計は30分おきにスプレッドシートへ書き込んだものを読んでいます。
 </div>
-<h2>ピンチ順（この月）</h2>
+<h2>ピンチ順（この月・今日以降）</h2>
 <div id="pinch-list"><div class="status">読み込み中…</div></div>
 <h2>月表示</h2>
 <div id="month-view"><div class="status">読み込み中…</div></div>
@@ -72,59 +72,17 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <div id="day-detail"><div class="status">上のピンチ順か月表示から日を選んでください。</div></div>
 </div>
 <script>
-// 勤務カレンダーと同じ2つの元データを読む。どちらも公開の仕組みは今まで通り。
-// 勤務タブ（出勤数・休み・臨時可能）:
-var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec";
-// カレンダービューアと同じGAS（休暇・退職物件・面接・社員休暇の5カレンダー）:
-var CAL_GAS = "https://script.google.com/macros/s/AKfycbzH0bnxWZFAE_ApMO5BKKeiewwMtlehvd47A95YP9jYD4t33yAGLIK1CPm6fEaDKTOutw/exec";
-var CAL_IDS = [
-"pcm.tokyo@gmail.com",
-"2nal2vfrf98qddgbl0janhdjhk@group.calendar.google.com",
-"7v6f4h2bbd41v7vfictq5pppfo@group.calendar.google.com",
-"si819hvg2rep07i32vbtaboh18@group.calendar.google.com",
-"t8e0hakn7kjgdel4mpvjmdljuo@group.calendar.google.com"
-];
-var CAL_LEAVE = "pcm.tokyo@gmail.com"; // 休暇（クルー・CS・パート）
-var CAL_RETIRE = "2nal2vfrf98qddgbl0janhdjhk@group.calendar.google.com"; // 退職物件
-var CAL_STAFF = "t8e0hakn7kjgdel4mpvjmdljuo@group.calendar.google.com"; // 休暇（社員）
+// 事前計算した「臨時募集用」タブを kinmu API (?action=rinji) から読むだけ。
+// 集計は GAS（rinji-calendar-refresh.gs）が30分おきに行う。
+// 未決物件も代行に数える。代行合計 ＝ 代行なし ＋ 部分代行 ＋ 未決。
+var KINMU_API = "https://script.google.com/macros/s/AKfycbwUub9-EQtMu-TshMRfrCHFBUT1IlcbKIgJImX9m87KS8lfYM0PprTWQF79t2wVPxY1/exec?action=rinji";
 var WD = ["日", "月", "火", "水", "木", "金", "土"];
 
 var curYear, curMonth; // curMonth は 0始まり
 var daysMap = {}; // "YYYY/MM/DD" -> day object
-var kinmuUpdated = "";
+var rinjiUpdated = "";
+var loaded = false;
 
-// 休暇カレンダーの1件を分類する。Pythonでの検証と同じ規則。
-// uncovered: 代行なし（全部必要）。partial-gomi / partial-work: 部分代行（残り必要）。
-// covered: 代行あり・全て（数えない）。person: 人だけの休暇（物件なし、数えない）。
-// skip: キャンセル・対応・初回指導。unknown: 説明に代行の行がない（数えない・要確認で出す）。
-// 同じ日・同じ物件・同じクルーの複数件は1つのグループにまとめ、代行あり＞部分代行（ゴミ＋作業の両方なら代行あり）＞代行なし＞要確認の順で1件分だけ数える。休暇が先に入り、あとから代行手配の件が追加される更新ペアのため。
-function classifyLeave(ev) {
-var t = ev.title || "", desc = ev.description || "";
-if (t.indexOf("[キャンセル]")!== -1 || t.indexOf("[対応]")!== -1 || t.indexOf("[初回指導]")!== -1) return "skip";
-if (/^\s*\[(有給休暇|休暇（有給なし）|早退|振替休暇|振替出勤)\]/.test(t)) return "person";
-if (desc.indexOf("エリア代行：なし")!== -1) return "uncovered";
-var hay = t + "\n" + desc;
-if (hay.indexOf("ゴミ出しのみ")!== -1 || hay.indexOf("ゴミ出しだけ")!== -1) return "partial-gomi";
-if (hay.indexOf("作業のみ")!== -1) return "partial-work";
-var m = desc.match(/エリア代行：([^\n]*)/);
-if (m && m[1].trim()!== "") return "covered";
-if (t.indexOf("エリア代行有")!== -1 || t.indexOf("館内代行")!== -1) return "covered";
-return "unknown";
-}
-function cleanTitle(t) {
-return (t || "").replace(/^\s*★\d+\s*/, "").trim();
-}
-function groupTitle(t) {
-return cleanTitle(t).replace(/^\[[^\]]+\]\s*/, "").trim();
-}
-function pickKind(items, kind) {
-for (var i = 0; i < items.length; i++) if (items[i].kind === kind) return items[i];
-return items[0];
-}
-function crewOf(desc) {
-var first = (desc || "").split("\n")[0] || "";
-return first.trim();
-}
 function fmtDate(d) {
 return d.getFullYear() + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + ("0" + d.getDate()).slice(-2);
 }
@@ -133,93 +91,65 @@ var p = (s || "").split("/");
 return new Date(+p[0], +p[1] - 1, +p[2]);
 }
 function esc(s) {
-return String(s == null? "": s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
-function levelOf(shortage) {
-if (shortage >= 10) return 3;
-if (shortage >= 5) return 2;
-if (shortage >= 1) return 1;
+function fmtUpdated(s) {
+var dt = new Date(s);
+if (isNaN(dt.getTime())) return s || "";
+function p(n) { return ("0" + n).slice(-2); }
+return dt.getFullYear() + "/" + p(dt.getMonth() + 1) + "/" + p(dt.getDate()) + " " + p(dt.getHours()) + ":" + p(dt.getMinutes());
+}
+function levelOf(net) {
+if (net >= 45) return 3;
+if (net >= 40) return 2;
+if (net >= 1) return 1;
 return 0;
 }
+function todayKey() {
+return fmtDate(new Date());
+}
 
-function buildDays(kinmu, events) {
+function buildDays(rows) {
 daysMap = {};
-(kinmu.days || []).forEach(function (kd) {
-daysMap[kd.date] = {
-date: kd.date, weekday: kd.weekday,
-emp: kd.emp, alb: kd.alb, other: kd.other,
-total: (kd.emp || 0) + (kd.alb || 0) + (kd.other || 0),
-off: kd.off || [], avail: kd.avail || [],
-uncovered: [], partial: [], covered: 0, unknown: [], leaveGroups: {},
-undec: {}, finals: [], staffOff: []
+(rows || []).forEach(function (r) {
+var total = (r.emp || 0) + (r.alb || 0) + (r.other || 0);
+daysMap[r.date] = {
+date: r.date, weekday: r.weekday,
+emp: r.emp || 0, alb: r.alb || 0, other: r.other || 0, total: total,
+off: r.off || 0, avail: r.avail || 0,
+uncovered: r.uncovered || 0, partialGomi: r.partialGomi || 0, partialWork: r.partialWork || 0,
+covered: r.covered || 0, undec: r.undec || 0, finals: r.finals || 0,
+staffOff: r.staffOff || 0, unknown: r.unknown || 0, unknownNames: r.unknownNames || [],
+shortage: r.shortage || 0, net: r.net || 0,
+level: levelOf(r.net || 0)
 };
-});
-kinmuUpdated = kinmu.updatedAt || "";
-(events || []).forEach(function (ev) {
-var d = new Date(ev.startTime);
-var key = fmtDate(d);
-if (!daysMap[key]) {
-daysMap[key] = { date: key, weekday: WD[d.getDay()], emp: 0, alb: 0, other: 0, total: 0, off: [], avail: [], uncovered: [], partial: [], covered: 0, unknown: [], leaveGroups: {}, undec: {}, finals: [], staffOff: []};
-}
-var day = daysMap[key];
-if (ev.calId === CAL_LEAVE) {
-var c = classifyLeave(ev);
-if (c === "skip" || c === "person") return;
-var item = { title: cleanTitle(ev.title), crew: crewOf(ev.description), kind: c};
-var gk = groupTitle(ev.title) + "|" + item.crew;
-if (!day.leaveGroups[gk]) day.leaveGroups[gk] = [];
-day.leaveGroups[gk].push(item);
-} else if (ev.calId === CAL_RETIRE) {
-if ((ev.title || "").indexOf("未決")!== -1) {
-day.undec[(ev.title || "").replace("", "").trim()] = true;
-}
-if ((ev.title || "").indexOf("最終作業日")!== -1) day.finals.push(ev.title);
-} else if (ev.calId === CAL_STAFF) {
-var m = (ev.description || "").match(/人工不足の場合の臨時出勤者：([^\n]*)/);
-var backup = m? m[1].trim(): "";
-if (!backup || backup === "undefined") backup = "未定";
-day.staffOff.push({ title: ev.title, backup: backup});
-}
-});
-Object.keys(daysMap).forEach(function (k) {
-var day = daysMap[k];
-Object.keys(day.leaveGroups).forEach(function (gk) {
-var items = day.leaveGroups[gk];
-var kinds = {};
-items.forEach(function (it) { kinds[it.kind] = true; });
-if (kinds.covered) day.covered++;
-else if (kinds["partial-gomi"] && kinds["partial-work"]) day.covered++;
-else if (kinds["partial-gomi"]) day.partial.push(pickKind(items, "partial-gomi"));
-else if (kinds["partial-work"]) day.partial.push(pickKind(items, "partial-work"));
-else if (kinds.uncovered) day.uncovered.push(pickKind(items, "uncovered"));
-else day.unknown.push(items[0]);
-});
-day.shortage = day.uncovered.length + day.partial.length;
-day.net = Math.max(0, day.shortage - day.avail.length);
-day.undecCount = Object.keys(day.undec).length;
-day.level = levelOf(day.shortage);
 });
 }
 
 function render() {
 var y = curYear, m = curMonth; // m は 0始まり
 document.getElementById("updated").textContent =
-"対象: " + y + "年" + (m + 1) + "月" + (kinmuUpdated? " ／ 勤務タブ更新: " + kinmuUpdated: "");
-// ピンチ順
-var list = Object.keys(daysMap).map(function (k) { return daysMap[k];})
-.filter(function (d) { var dt = parseKinmuDate(d.date); return dt.getFullYear() === y && dt.getMonth() === m;})
-.sort(function (a, b) { return b.net - a.net || b.shortage - a.shortage || a.total - b.total;});
+"対象: " + y + "年" + (m + 1) + "月" + (rinjiUpdated ? " ／ 更新: " + fmtUpdated(rinjiUpdated) : "");
+// ピンチ順（表示中の月・今日以降だけ）
+var tk = todayKey();
+var list = Object.keys(daysMap).map(function (k) { return daysMap[k]; })
+.filter(function (d) { var dt = parseKinmuDate(d.date); return dt.getFullYear() === y && dt.getMonth() === m && d.date >= tk; })
+.sort(function (a, b) { return b.net - a.net || b.shortage - a.shortage || a.total - b.total; });
 var html = "";
 var shown = 0;
 list.forEach(function (d) {
-if (d.shortage === 0 && d.undecCount === 0) return;
+if (d.shortage === 0) return;
 shown++;
 var dt = parseKinmuDate(d.date);
 var label = d.date.slice(5) + " (" + WD[dt.getDay()] + ")";
+var partial = d.partialGomi + d.partialWork;
+var sub = [];
+if (d.finals) sub.push("最終作業日 " + d.finals + "件");
+if (d.unknown) sub.push("要確認 " + d.unknown + "件");
 html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
-+ '<div class="d">' + label + '　出勤 ' + d.total + '人・代行 ' + d.shortage + '件・臨時可能 ' + d.avail.length + '人</div>'
-+ '<div class="n">代行の内訳：代行なし' + d.uncovered.length + '・部分代行' + d.partial.length + '　ネット ' + d.net + '　休み ' + d.off.length + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）</div>'
-+ '<div class="s">未決 ' + d.undecCount + '件' + (d.finals.length? '　最終作業日 ' + d.finals.length + '件': '') + (d.unknown.length? '　要確認 ' + d.unknown.length + '件': '') + '</div>'
++ '<div class="d">' + label + '　出勤 ' + d.total + '人・代行 ' + d.shortage + '件・臨時可能 ' + d.avail + '人</div>'
++ '<div class="n">代行の内訳：代行なし' + d.uncovered + '・部分代行' + partial + '・未決' + d.undec + '　ネット ' + d.net + '　休み ' + d.off + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）</div>'
++ (sub.length ? '<div class="s">' + sub.join('　') + '</div>' : '')
 + '</div>';
 });
 if (!shown) html = '<div class="status">この月は代行が必要なものは0件です。</div>';
@@ -230,19 +160,19 @@ var start = new Date(y, m, 1 - first.getDay());
 var last = new Date(y, m + 1, 0);
 var end = new Date(y, m + 1, 6 - last.getDay());
 var mh = "";
-["日", "月", "火", "水", "木", "金", "土"].forEach(function (w) { mh += '<div class="month-head">' + w + '</div>';});
+["日", "月", "火", "水", "木", "金", "土"].forEach(function (w) { mh += '<div class="month-head">' + w + '</div>'; });
 var cells = "";
 var cur = new Date(start);
 while (cur <= end) {
 var key = fmtDate(cur);
 var d = daysMap[key];
-var other = cur.getMonth()!== m? " other": "";
+var other = cur.getMonth() !== m ? " other" : "";
 if (d) {
 var lv = "lv" + d.level;
 cells += '<div class="cell' + other + '" id="cell-' + key.replace(/\//g, "-") + '" onclick="selectDay(\'' + key + '\')">'
 + '<div class="num">' + cur.getDate() + '</div>'
-+ '<div class="bad ' + lv + '">' + (d.shortage > 0? "代行" + d.shortage: "—") + '</div>'
-+ '<div class="sub">出勤' + d.total + '・臨可' + d.avail.length + '</div></div>';
++ '<div class="bad ' + lv + '">' + (d.shortage > 0 ? "代行" + d.shortage : "—") + '</div>'
++ '<div class="sub">出勤' + d.total + '・臨可' + d.avail + '</div></div>';
 } else {
 cells += '<div class="cell' + other + '"><div class="num">' + cur.getDate() + '</div></div>';
 }
@@ -254,49 +184,41 @@ document.getElementById("month-view").innerHTML = '<div class="month-grid">' + m
 function selectDay(key) {
 var d = daysMap[key];
 if (!d) return;
-document.querySelectorAll(".cell.sel").forEach(function (el) { el.classList.remove("sel");});
+document.querySelectorAll(".cell.sel").forEach(function (el) { el.classList.remove("sel"); });
 var cell = document.getElementById("cell-" + key.replace(/\//g, "-"));
 if (cell) cell.classList.add("sel");
 var dt = parseKinmuDate(d.date);
-var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・代行 " + d.shortage + "件・臨時可能 " + d.avail.length + "人　ネット " + d.net + "</h3>";
-html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　休み " + d.off.length + "人　臨可 " + d.avail.length + "人　代行済み " + d.covered + "件</div>";
+var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + "人・代行 " + d.shortage + "件・臨時可能 " + d.avail + "人　ネット " + d.net + "</h3>";
+html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　休み " + d.off + "人　臨可 " + d.avail + "人　代行済み " + d.covered + "件</div>";
 html += '<div class="sec-label">代行が必要な内訳（臨時募集の対象）</div>';
-var gomiN = d.partial.filter(function (it) { return it.kind === "partial-gomi"; }).length;
-var workN = d.partial.length - gomiN;
-html += "<div>代行なし " + d.uncovered.length + "件・部分代行 " + d.partial.length + "件（ゴミ出しのみ代行 " + gomiN + "件・作業のみ代行 " + workN + "件）</div>";
-
-
-if (d.staffOff.length) {
-html += "<div>社員の休み " + d.staffOff.length + "件（社員休暇カレンダー）</div>";
+var partial = d.partialGomi + d.partialWork;
+html += "<div>代行なし " + d.uncovered + "件・部分代行 " + partial + "件（ゴミ出しのみ代行 " + d.partialGomi + "件・作業のみ代行 " + d.partialWork + "件）・未決 " + d.undec + "件</div>";
+if (d.staffOff) {
+html += "<div>社員の休み " + d.staffOff + "件（社員休暇カレンダー）</div>";
 }
-if (d.undecCount) {
-html += "<div>未決物件 " + d.undecCount + "件（別枠・代行の件数には含めない）</div>";
+if (d.finals) {
+html += "<div>最終作業日 " + d.finals + "件（別枠）</div>";
 }
-if (d.finals.length) {
-html += "<div>最終作業日 " + d.finals.length + "件（別枠）</div>";
-}
-if (d.unknown.length) {
+if (d.unknown) {
 html += '<div class="sec-label">要確認（説明に代行の行がなく、代行の件数に数えていない）</div><ul>';
-d.unknown.forEach(function (it) { html += "<li>" + esc(it.title) + "（" + esc(it.crew) + "）<span class='tag chk'>要確認</span></li>";});
+d.unknownNames.forEach(function (n) { html += "<li>" + esc(n) + "<span class='tag chk'>要確認</span></li>"; });
+if (!d.unknownNames.length) html += "<li>" + d.unknown + "件</li>";
 html += "</ul>";
 }
 document.getElementById("day-detail").innerHTML = '<div class="detail">' + html + "</div>";
-document.getElementById("day-detail").scrollIntoView({ block: "nearest"});
+document.getElementById("day-detail").scrollIntoView({ block: "nearest" });
 }
 
 function loadMonth(y, m) {
 curYear = y; curMonth = m;
+if (loaded) { render(); return; }
 document.getElementById("pinch-list").innerHTML = '<div class="status">読み込み中…</div>';
 document.getElementById("month-view").innerHTML = '<div class="status">読み込み中…</div>';
 document.getElementById("updated").textContent = "読み込み中…";
-var start = new Date(y, m, 1 - new Date(y, m, 1).getDay()).getTime();
-var end = new Date(y, m + 1, 7 - new Date(y, m + 1, 0).getDay()).getTime();
-var calUrl = CAL_GAS + "?start=" + start + "&end=" + end + "&calIds=" + encodeURIComponent(CAL_IDS.join(",")) + "&detail=full";
-Promise.all([
-fetch(KINMU_API).then(function (r) { return r.json();}),
-fetch(calUrl).then(function (r) { return r.json();})
-]).then(function (res) {
-buildDays(res[0], res[1].events || []);
+fetch(KINMU_API).then(function (r) { return r.json(); }).then(function (res) {
+rinjiUpdated = res.updatedAt || "";
+buildDays(res.days || []);
+loaded = true;
 render();
 }).catch(function (e) {
 document.getElementById("pinch-list").innerHTML = '<div class="status">読み込みに失敗しました。もう一度お試しください。</div>';
