@@ -50,7 +50,7 @@ h2 { font-size: 14px; margin: 16px 4px 8px;}
 <body>
 <div class="header">
 <div class="title">臨時募集カレンダー（試作）</div>
-<div class="version">rinji ver.6 2026-11-17 休暇の表示・ネットの数字をやめる</div>
+<div class="version">rinji ver.7 2026-11-17 未決の内訳（ゴミのみ／全部）</div>
 <div class="nav">
 <button id="btn-prev" onclick="moveMonth(-1)">◀ 前月</button>
 <button id="btn-today" onclick="goThisMonth()">今月</button>
@@ -118,7 +118,7 @@ date: r.date, weekday: r.weekday,
 emp: r.emp || 0, alb: r.alb || 0, other: r.other || 0, total: total,
 off: r.off || 0, avail: r.avail || 0,
 uncovered: r.uncovered || 0, partialGomi: r.partialGomi || 0, partialWork: r.partialWork || 0,
-covered: r.covered || 0, undec: r.undec || 0, finals: r.finals || 0,
+covered: r.covered || 0, undec: r.undec || 0, undecGomi: r.undecGomi || 0, undecFull: r.undecFull || 0, finals: r.finals || 0,
 staffOff: r.staffOff || 0, unknown: r.unknown || 0, unknownNames: r.unknownNames || [],
 shortage: r.shortage || 0, net: r.net || 0,
 level: levelOf(r.net || 0)
@@ -143,12 +143,13 @@ shown++;
 var dt = parseKinmuDate(d.date);
 var label = d.date.slice(5) + " (" + WD[dt.getDay()] + ")";
 var partial = d.partialGomi + d.partialWork;
+var undecS = d.undecGomi ? '未決' + d.undec + '（ゴミのみ' + d.undecGomi + '・全部' + d.undecFull + '）' : '未決' + d.undec;
 var sub = [];
 if (d.finals) sub.push("最終作業日 " + d.finals + "件");
 if (d.unknown) sub.push("要確認 " + d.unknown + "件");
 html += '<div class="pinch-row lv' + d.level + '" onclick="selectDay(\'' + d.date + '\')">'
 + '<div class="d">' + label + '　出勤 ' + d.total + '人（社' + d.emp + '・ア' + d.alb + '・他' + d.other + '）・代行 ' + d.shortage + '件・臨時可能 ' + d.avail + '人</div>'
-+ '<div class="n">代行の内訳：休暇' + d.uncovered + '・部分代行' + partial + '・未決' + d.undec + '　休み ' + d.off + '人</div>'
++ '<div class="n">代行の内訳：休暇' + d.uncovered + '・部分代行' + partial + '・' + undecS + '　休み ' + d.off + '人</div>'
 + (sub.length ? '<div class="s">' + sub.join('　') + '</div>' : '')
 + '</div>';
 });
@@ -192,7 +193,8 @@ var html = "<h3>" + d.date + " (" + WD[dt.getDay()] + ")　出勤 " + d.total + 
 html += "<div>出勤 " + d.total + "人（社" + d.emp + "・ア" + d.alb + "・他" + d.other + "）　休み " + d.off + "人　臨可 " + d.avail + "人　代行済み " + d.covered + "件</div>";
 html += '<div class="sec-label">代行が必要な内訳（臨時募集の対象）</div>';
 var partial = d.partialGomi + d.partialWork;
-html += "<div>休暇 " + d.uncovered + "件・部分代行 " + partial + "件（ゴミ出しのみ代行 " + d.partialGomi + "件・作業のみ代行 " + d.partialWork + "件）・未決 " + d.undec + "件</div>";
+var undecS = d.undecGomi ? '未決 ' + d.undec + '件（ゴミのみ' + d.undecGomi + '件・全部' + d.undecFull + '件）' : '未決 ' + d.undec + '件';
+html += "<div>休暇 " + d.uncovered + "件・部分代行 " + partial + "件（ゴミ出しのみ代行 " + d.partialGomi + "件・作業のみ代行 " + d.partialWork + "件）・" + undecS + "</div>";
 if (d.staffOff) {
 html += "<div>社員の休み " + d.staffOff + "件（社員休暇カレンダー）</div>";
 }
